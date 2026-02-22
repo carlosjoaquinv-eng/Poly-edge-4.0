@@ -1097,6 +1097,7 @@ class MarketMakerEngine:
             "quote_count": self._quote_count,
             "fill_count": self._fill_count,
             "spread_captured": round(self._total_spread_captured, 4),
+            "kill_switch": self.inventory.check_kill_switch(),
             "inventory": self.inventory.get_stats(),
             "pnl": {
                 "realized": round(self.inventory.total_realized_pnl, 2),

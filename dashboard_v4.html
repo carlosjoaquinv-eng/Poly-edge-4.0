@@ -744,10 +744,24 @@ function updateMM(mm) {
 
   // Kill switch
   const ks = document.getElementById('mm-kill-switch');
-  ks.style.display = mm.kill_switch ? 'block' : 'none';
+  ks.style.display = (mm.kill_switch || mm.inventory?.kill_switch) ? 'block' : 'none';
 
   // Quote table
-  updateQuotes(mm.active_quotes || []);
+  // Convert quotes dict → array for table rendering
+  let quotesArr = mm.active_quotes || [];
+  if (mm.quotes && typeof mm.quotes === 'object' && !Array.isArray(mm.quotes)) {
+    quotesArr = Object.entries(mm.quotes).map(([tid, q]) => ({
+      condition_id: tid,
+      bid_price: q.bid ? parseFloat(q.bid.split('x')[0]) : null,
+      ask_price: q.ask ? parseFloat(q.ask.split('x')[0]) : null,
+      bid_size: q.bid ? parseFloat(q.bid.split('x')[1]) : 0,
+      ask_size: q.ask ? parseFloat(q.ask.split('x')[1]) : 0,
+      spread: q.bid && q.ask ? parseFloat(q.ask.split('x')[0]) - parseFloat(q.bid.split('x')[0]) : null,
+      fair_value: q.fair_value,
+      market: tid.substring(0, 12) + '…',
+    }));
+  }
+  updateQuotes(quotesArr);
   updateInventory(mm.inventory?.positions || {});
 }
 
@@ -778,7 +792,7 @@ function updateInventory(positions) {
 
   const maxPos = 50; // $50 max per market
   panel.innerHTML = Object.entries(positions).map(([market, pos]) => {
-    const net = pos.net_position || 0;
+    const net = pos.net_position || pos.net || 0;
     const pct = Math.min(Math.abs(net) / maxPos * 50, 50);
     const isLong = net > 0;
     return `
