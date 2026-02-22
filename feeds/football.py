@@ -182,15 +182,25 @@ class FootballFeed:
             await self._refresh_fixtures()
             self._last_fixtures_fetch = now
         
-        # Poll events for each live match
+        # Poll events for each live match (rate-limited: max 8 per cycle, 1s gap)
+        polled = 0
+        max_per_cycle = 8  # Reserve 2 req/min for fixtures
         for fid, match in list(self._matches.items()):
             if match.status in ("FT", "AET", "PEN", "CANC", "PST", "ABD"):
                 continue
             
+            if polled >= max_per_cycle:
+                break
+            
             new_events = await self._poll_match_events(match)
             events.extend(new_events)
+            polled += 1
             
-            # Also check status transitions
+            # Rate limit: 1 second between API calls
+            if polled < max_per_cycle:
+                await asyncio.sleep(1.0)
+            
+            # Also check status transitions (no API call)
             status_events = await self._check_status_change(match)
             events.extend(status_events)
         
