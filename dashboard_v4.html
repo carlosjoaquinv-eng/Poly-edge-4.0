@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolyEdge v4 — Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-0: #0a0a0f;
+  --bg-1: #0f1118;
+  --bg-2: #161822;
+  --bg-3: #1c1f2e;
+  --border: #2a2d3e;
+  --border-active: #3d4160;
+  --text-0: #e8eaf0;
+  --text-1: #a0a4b8;
+  --text-2: #6b6f85;
+  --green: #00e676;
+  --green-dim: #00c853;
+  --red: #ff5252;
+  --red-dim: #d32f2f;
+  --amber: #ffd740;
+  --amber-dim: #ffab00;
+  --cyan: #00e5ff;
+  --purple: #b388ff;
+  --blue: #448aff;
+  --panel-glow: 0 0 30px rgba(0,229,255,0.03);
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Space Grotesk', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.logo {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--cyan);
+  letter-spacing: -0.5px;
+}
+.logo span { color: var(--text-2); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.mode-badge {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.mode-paper { background: rgba(255,215,64,0.15); color: var(--amber); border: 1px solid rgba(255,215,64,0.3); }
+.mode-live { background: rgba(255,82,82,0.15); color: var(--red); border: 1px solid rgba(255,82,82,0.3); animation: pulse-red 2s infinite; }
+@keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+.header-right { display: flex; align-items: center; gap: 20px; }
+.header-stat { text-align: right; }
+.header-stat-label { font-size: 10px; color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; }
+.header-stat-value { font-size: 16px; font-weight: 600; }
+.stat-positive { color: var(--green); }
+.stat-negative { color: var(--red); }
+.stat-neutral { color: var(--text-1); }
+
+.uptime { font-size: 11px; color: var(--text-2); }
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: blink 2s infinite;
+}
+.dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.dot-amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: auto auto auto;
+  gap: 1px;
+  padding: 1px;
+  background: var(--border);
+  min-height: calc(100vh - 52px);
+}
+
+/* ── Panel ── */
+.panel {
+  background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.panel-title {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-1);
+}
+.panel-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+.tag-engine { background: rgba(0,229,255,0.12); color: var(--cyan); }
+.tag-feed { background: rgba(179,136,255,0.12); color: var(--purple); }
+.tag-meta { background: rgba(68,138,255,0.12); color: var(--blue); }
+.tag-risk { background: rgba(255,82,82,0.12); color: var(--red); }
+
+.panel-body {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+.panel-body::-webkit-scrollbar { width: 4px; }
+.panel-body::-webkit-scrollbar-track { background: var(--bg-1); }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+
+/* ── Span columns ── */
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+
+/* ── Data Table ── */
+.dtable { width: 100%; }
+.dtable th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dtable td {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(42,45,62,0.4);
+  font-size: 12px;
+}
+.dtable tr:hover td { background: rgba(0,229,255,0.02); }
+
+/* ── Metric Grid ── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.metric {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.metric-label {
+  font-size: 10px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+.metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--sans);
+}
+.metrics-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* ── Signal Row ── */
+.signal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  background: var(--bg-2);
+  border-left: 3px solid transparent;
+  transition: background 0.2s;
+}
+.signal-row:hover { background: var(--bg-3); }
+.signal-buy { border-left-color: var(--green); }
+.signal-sell { border-left-color: var(--red); }
+.signal-info { flex: 1; min-width: 0; }
+.signal-market {
+  font-size: 11px;
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.signal-detail { font-size: 10px; color: var(--text-2); margin-top: 2px; }
+.signal-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-critical { background: rgba(255,82,82,0.2); color: var(--red); }
+.badge-high { background: rgba(255,215,64,0.2); color: var(--amber); }
+.badge-medium { background: rgba(68,138,255,0.2); color: var(--blue); }
+.badge-low { background: rgba(107,111,133,0.2); color: var(--text-2); }
+
+/* ── PnL Bar ── */
+.pnl-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.pnl-bar-label { font-size: 11px; color: var(--text-2); width: 50px; }
+.pnl-bar-track {
+  flex: 1;
+  height: 16px;
+  background: var(--bg-0);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.pnl-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  position: absolute;
+}
+.pnl-bar-value { font-size: 11px; font-weight: 500; width: 60px; text-align: right; }
+
+/* ── Event Log ── */
+.log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(42,45,62,0.3);
+  font-size: 11px;
+}
+.log-time { color: var(--text-2); white-space: nowrap; width: 55px; flex-shrink: 0; }
+.log-type {
+  font-weight: 600;
+  width: 70px;
+  flex-shrink: 0;
+}
+.log-msg { color: var(--text-1); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Inventory Bars ── */
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.inv-label { font-size: 11px; width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.inv-track {
+  flex: 1;
+  height: 20px;
+  background: var(--bg-0);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.inv-fill-long, .inv-fill-short {
+  position: absolute;
+  height: 100%;
+  top: 0;
+  transition: width 0.4s ease;
+}
+.inv-fill-long { left: 50%; background: var(--green); opacity: 0.5; border-radius: 0 3px 3px 0; }
+.inv-fill-short { right: 50%; background: var(--red); opacity: 0.5; border-radius: 3px 0 0 3px; }
+.inv-center {
+  position: absolute;
+  left: 50%;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--text-2);
+}
+.inv-value { font-size: 11px; width: 50px; text-align: right; font-weight: 500; }
+
+/* ── Meta Report ── */
+.meta-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.meta-card-title { font-size: 10px; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.meta-card-text { font-size: 12px; color: var(--text-1); line-height: 1.6; }
+
+.adj-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; background: var(--bg-0); border-radius: 3px; margin-top: 4px;
+  font-size: 11px;
+}
+.adj-engine { color: var(--cyan); font-weight: 600; width: 50px; }
+.adj-param { color: var(--text-0); flex: 1; }
+.adj-change { color: var(--amber); font-weight: 500; white-space: nowrap; }
+
+/* ── Loading / Empty ── */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-2);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .span-3 { grid-column: span 2; }
+  .span-4 { grid-column: span 2; }
+}
+@media (max-width: 768px) {
+  .grid { grid-template-columns: 1fr; }
+  .span-2, .span-3, .span-4 { grid-column: span 1; }
+  .header { flex-direction: column; gap: 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">PolyEdge<span>v4.0</span></div>
+    <div class="mode-badge mode-paper" id="mode-badge">PAPER</div>
+    <div class="uptime">
+      <span class="status-dot dot-green" id="status-dot"></span>
+      <span id="uptime">0h 0m</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-stat">
+      <div class="header-stat-label">Total PnL</div>
+      <div class="header-stat-value stat-neutral" id="total-pnl">$0.00</div>
+    </div>
+    <div class="header-stat">
+      <div class="header-stat-label">Exposure</div>
+      <div class="header-stat-value stat-neutral" id="total-exposure">$0 / $500</div>
+    </div>
+    <div class="header-stat">
+      <div class="header-stat-label">Engines</div>
+      <div class="header-stat-value stat-neutral" id="engine-count">0 / 3</div>
+    </div>
+  </div>
+</div>
+
+<!-- Dashboard Grid -->
+<div class="grid">
+
+  <!-- Panel 1: System Status -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">System Status</span>
+      <span class="panel-tag tag-risk">LIVE</span>
+    </div>
+    <div class="panel-body">
+      <div class="metrics" id="system-metrics">
+        <div class="metric">
+          <div class="metric-label">Bankroll</div>
+          <div class="metric-value" id="sys-bankroll">$5,000</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">ROI</div>
+          <div class="metric-value stat-neutral" id="sys-roi">0.00%</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">MM Status</div>
+          <div class="metric-value" id="sys-mm-status">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Sniper Status</div>
+          <div class="metric-value" id="sys-sniper-status">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Meta Next Run</div>
+          <div class="metric-value" id="sys-meta-next">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">CLOB</div>
+          <div class="metric-value" id="sys-clob">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Market Maker Overview -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Market Maker</span>
+      <span class="panel-tag tag-engine">Engine 1</span>
+    </div>
+    <div class="panel-body">
+      <div class="metrics metrics-3" id="mm-metrics">
+        <div class="metric">
+          <div class="metric-label">Markets</div>
+          <div class="metric-value" id="mm-markets">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Quotes</div>
+          <div class="metric-value" id="mm-quotes">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Fills</div>
+          <div class="metric-value" id="mm-fills">0</div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="pnl-bar">
+          <span class="pnl-bar-label">Real</span>
+          <div class="pnl-bar-track">
+            <div class="pnl-bar-fill" id="mm-real-bar" style="width:50%;left:50%;background:var(--green)"></div>
+          </div>
+          <span class="pnl-bar-value stat-neutral" id="mm-real-pnl">$0.00</span>
+        </div>
+        <div class="pnl-bar">
+          <span class="pnl-bar-label">Unreal</span>
+          <div class="pnl-bar-track">
+            <div class="pnl-bar-fill" id="mm-unreal-bar" style="width:50%;left:50%;background:var(--amber)"></div>
+          </div>
+          <span class="pnl-bar-value stat-neutral" id="mm-unreal-pnl">$0.00</span>
+        </div>
+      </div>
+      <div id="mm-kill-switch" style="display:none;margin-top:8px;padding:6px 10px;background:rgba(255,82,82,0.15);border:1px solid var(--red);border-radius:3px;font-size:11px;color:var(--red);font-weight:600;">
+        ⚠ KILL SWITCH TRIGGERED
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 3: Quote Book -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span class="panel-title">Active Quotes</span>
+      <span class="panel-tag tag-engine">MM Live</span>
+    </div>
+    <div class="panel-body">
+      <table class="dtable" id="quote-table">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Bid</th>
+            <th>Ask</th>
+            <th>Spread</th>
+            <th>Size</th>
+            <th>Fair Value</th>
+          </tr>
+        </thead>
+        <tbody id="quote-tbody">
+          <tr><td colspan="6" class="empty-state">Waiting for quotes...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Panel 4: Inventory Heatmap -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Inventory</span>
+      <span class="panel-tag tag-risk">Risk</span>
+    </div>
+    <div class="panel-body" id="inventory-panel">
+      <div class="empty-state">No positions</div>
+    </div>
+  </div>
+
+  <!-- Panel 5: Sniper Feed -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Sniper Trades</span>
+      <span class="panel-tag tag-engine">Engine 2</span>
+    </div>
+    <div class="panel-body" id="sniper-panel">
+      <div class="metrics" style="margin-bottom:12px">
+        <div class="metric">
+          <div class="metric-label">Trades</div>
+          <div class="metric-value" id="sniper-trades">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Win Rate</div>
+          <div class="metric-value" id="sniper-winrate">0%</div>
+        </div>
+      </div>
+      <div id="sniper-positions"></div>
+    </div>
+  </div>
+
+  <!-- Panel 6: Gap Radar -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span class="panel-title">Gap Radar</span>
+      <span class="panel-tag tag-feed">Signals</span>
+    </div>
+    <div class="panel-body" id="gap-panel">
+      <div class="empty-state">Waiting for events...</div>
+    </div>
+  </div>
+
+  <!-- Panel 7: Live Events Log -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span class="panel-title">Event Log</span>
+      <span class="panel-tag tag-feed">Feeds</span>
+    </div>
+    <div class="panel-body" id="event-log">
+      <div class="empty-state">No events yet</div>
+    </div>
+  </div>
+
+  <!-- Panel 8: Meta Strategist -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span class="panel-title">Meta Strategist</span>
+      <span class="panel-tag tag-meta">Engine 3</span>
+    </div>
+    <div class="panel-body" id="meta-panel">
+      <div class="metrics" style="margin-bottom:12px">
+        <div class="metric">
+          <div class="metric-label">Runs</div>
+          <div class="metric-value" id="meta-runs">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">LLM Cost</div>
+          <div class="metric-value" id="meta-cost">$0.00</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Adjustments</div>
+          <div class="metric-value" id="meta-adjustments">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Next Run</div>
+          <div class="metric-value" id="meta-next-run">—</div>
+        </div>
+      </div>
+      <div id="meta-reports"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// PolyEdge v4 Dashboard — Client
+// ─────────────────────────────────────────────
+
+const API_BASE = window.location.origin;
+const REFRESH_MS = 5000; // 5 second refresh
+
+// ── State ──
+let state = {
+  status: null,
+  mm: null,
+  sniper: null,
+  meta: null,
+  eventLog: [],
+};
+
+// ── Fetch Helpers ──
+async function fetchJSON(endpoint) {
+  try {
+    const resp = await fetch(`${API_BASE}${endpoint}`, { signal: AbortSignal.timeout(4000) });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Formatting ──
+function fmt$(v, decimals = 2) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '' : '-';
+  return `${s}$${Math.abs(v).toFixed(decimals)}`;
+}
+function fmtPct(v) { return v != null ? `${v.toFixed(1)}%` : '—'; }
+function fmtTime(secs) {
+  if (secs == null) return '—';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtPrice(v) { return v != null ? v.toFixed(3) : '—'; }
+function fmtShort(s, len = 45) {
+  if (!s) return '—';
+  return s.length > len ? s.substring(0, len) + '…' : s;
+}
+function pnlClass(v) {
+  if (v > 0.01) return 'stat-positive';
+  if (v < -0.01) return 'stat-negative';
+  return 'stat-neutral';
+}
+function urgencyClass(u) {
+  const map = { CRITICAL: 'badge-critical', HIGH: 'badge-high', MEDIUM: 'badge-medium', LOW: 'badge-low' };
+  return map[u] || 'badge-low';
+}
+
+// ── Update Functions ──
+
+function updateHeader(data) {
+  if (!data) return;
+  const engines = data.engines || {};
+  const mm = engines.market_maker || {};
+  const sn = engines.sniper || {};
+  const me = engines.meta || {};
+
+  // Mode
+  const badge = document.getElementById('mode-badge');
+  if (data.mode === 'LIVE') {
+    badge.textContent = 'LIVE';
+    badge.className = 'mode-badge mode-live';
+  } else {
+    badge.textContent = 'PAPER';
+    badge.className = 'mode-badge mode-paper';
+  }
+
+  // Uptime
+  document.getElementById('uptime').textContent = fmtTime((data.uptime_hours || 0) * 3600);
+
+  // Status dot
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot dot-green';
+
+  // PnL
+  const mmPnl = (mm.pnl?.realized || 0) + (mm.pnl?.unrealized || 0);
+  const snPnl = sn.executor?.total_pnl || 0;
+  const totalPnl = mmPnl + snPnl;
+  const el = document.getElementById('total-pnl');
+  el.textContent = fmt$(totalPnl);
+  el.className = 'header-stat-value ' + pnlClass(totalPnl);
+
+  // Exposure
+  const mmExp = mm.inventory?.total_exposure || 0;
+  const snExp = sn.executor?.total_exposure || 0;
+  document.getElementById('total-exposure').textContent = `$${(mmExp + snExp).toFixed(0)} / $500`;
+
+  // Engines count
+  let running = 0;
+  if (mm.status === 'running') running++;
+  if (sn.status === 'running') running++;
+  if (me.status === 'running') running++;
+  document.getElementById('engine-count').textContent = `${running} / 3`;
+}
+
+function updateSystem(data) {
+  if (!data) return;
+  const engines = data.engines || {};
+  const mm = engines.market_maker || {};
+  const sn = engines.sniper || {};
+  const me = engines.meta || {};
+
+  const mmPnl = (mm.pnl?.realized || 0) + (mm.pnl?.unrealized || 0);
+  const snPnl = sn.executor?.total_pnl || 0;
+  const totalPnl = mmPnl + snPnl;
+  const roi = totalPnl / 5000 * 100;
+
+  document.getElementById('sys-bankroll').textContent = '$5,000';
+  const roiEl = document.getElementById('sys-roi');
+  roiEl.textContent = fmtPct(roi);
+  roiEl.className = 'metric-value ' + pnlClass(roi);
+
+  document.getElementById('sys-mm-status').textContent = mm.status || 'stopped';
+  document.getElementById('sys-mm-status').style.color = mm.status === 'running' ? 'var(--green)' : 'var(--text-2)';
+
+  document.getElementById('sys-sniper-status').textContent = sn.status || 'stopped';
+  document.getElementById('sys-sniper-status').style.color = sn.status === 'running' ? 'var(--green)' : 'var(--text-2)';
+
+  document.getElementById('sys-meta-next').textContent = me.next_run_in_hours != null ? `${me.next_run_in_hours}h` : '—';
+  document.getElementById('sys-clob').textContent = data.mode || '—';
+}
+
+function updateMM(mm) {
+  if (!mm) return;
+  document.getElementById('mm-markets').textContent = mm.active_markets || 0;
+  document.getElementById('mm-quotes').textContent = mm.quote_count || 0;
+  document.getElementById('mm-fills').textContent = mm.fill_count || 0;
+
+  const realPnl = mm.pnl?.realized || 0;
+  const unrealPnl = mm.pnl?.unrealized || 0;
+
+  const realEl = document.getElementById('mm-real-pnl');
+  realEl.textContent = fmt$(realPnl);
+  realEl.className = 'pnl-bar-value ' + pnlClass(realPnl);
+
+  const unrealEl = document.getElementById('mm-unreal-pnl');
+  unrealEl.textContent = fmt$(unrealPnl);
+  unrealEl.className = 'pnl-bar-value ' + pnlClass(unrealPnl);
+
+  // Bars (center = 0, max = $50)
+  const maxBar = 50;
+  const realW = Math.min(Math.abs(realPnl) / maxBar * 50, 50);
+  const realBar = document.getElementById('mm-real-bar');
+  if (realPnl >= 0) {
+    realBar.style.left = '50%'; realBar.style.right = 'auto';
+    realBar.style.background = 'var(--green)';
+  } else {
+    realBar.style.right = '50%'; realBar.style.left = 'auto';
+    realBar.style.background = 'var(--red)';
+  }
+  realBar.style.width = realW + '%';
+
+  const unrealW = Math.min(Math.abs(unrealPnl) / maxBar * 50, 50);
+  const unrealBar = document.getElementById('mm-unreal-bar');
+  if (unrealPnl >= 0) {
+    unrealBar.style.left = '50%'; unrealBar.style.right = 'auto';
+    unrealBar.style.background = 'var(--green)';
+  } else {
+    unrealBar.style.right = '50%'; unrealBar.style.left = 'auto';
+    unrealBar.style.background = 'var(--amber)';
+  }
+  unrealBar.style.width = unrealW + '%';
+
+  // Kill switch
+  const ks = document.getElementById('mm-kill-switch');
+  ks.style.display = mm.kill_switch ? 'block' : 'none';
+
+  // Quote table
+  updateQuotes(mm.active_quotes || []);
+  updateInventory(mm.inventory?.positions || {});
+}
+
+function updateQuotes(quotes) {
+  const tbody = document.getElementById('quote-tbody');
+  if (!quotes || quotes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No active quotes</td></tr>';
+    return;
+  }
+  tbody.innerHTML = quotes.map(q => `
+    <tr>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtShort(q.market || q.condition_id, 30)}</td>
+      <td style="color:var(--green)">${fmtPrice(q.bid_price)}</td>
+      <td style="color:var(--red)">${fmtPrice(q.ask_price)}</td>
+      <td style="color:var(--amber)">${q.spread ? (q.spread * 100).toFixed(1) + '¢' : '—'}</td>
+      <td>$${(q.bid_size || 0).toFixed(0)}</td>
+      <td style="color:var(--cyan)">${fmtPrice(q.fair_value)}</td>
+    </tr>
+  `).join('');
+}
+
+function updateInventory(positions) {
+  const panel = document.getElementById('inventory-panel');
+  if (!positions || Object.keys(positions).length === 0) {
+    panel.innerHTML = '<div class="empty-state">No positions</div>';
+    return;
+  }
+
+  const maxPos = 50; // $50 max per market
+  panel.innerHTML = Object.entries(positions).map(([market, pos]) => {
+    const net = pos.net_position || 0;
+    const pct = Math.min(Math.abs(net) / maxPos * 50, 50);
+    const isLong = net > 0;
+    return `
+      <div class="inv-row">
+        <span class="inv-label" title="${market}">${fmtShort(market, 12)}</span>
+        <div class="inv-track">
+          <div class="inv-center"></div>
+          ${isLong
+            ? `<div class="inv-fill-long" style="width:${pct}%"></div>`
+            : `<div class="inv-fill-short" style="width:${pct}%"></div>`
+          }
+        </div>
+        <span class="inv-value" style="color:${isLong ? 'var(--green)' : 'var(--red)'}">
+          ${net >= 0 ? '+' : ''}${net.toFixed(1)}
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateSniper(sn) {
+  if (!sn) return;
+  const exec = sn.executor || {};
+  document.getElementById('sniper-trades').textContent = sn.trades_executed || 0;
+  document.getElementById('sniper-winrate').textContent = fmtPct(exec.win_rate || 0);
+
+  // Active positions
+  const posDiv = document.getElementById('sniper-positions');
+  const positions = exec.active_positions || [];
+  if (positions.length === 0) {
+    posDiv.innerHTML = '<div style="font-size:11px;color:var(--text-2);text-align:center;padding:8px">No active sniper positions</div>';
+    return;
+  }
+
+  posDiv.innerHTML = positions.map(p => `
+    <div class="signal-row ${p.direction === 'BUY' ? 'signal-buy' : 'signal-sell'}">
+      <div class="signal-info">
+        <div class="signal-market">${fmtShort(p.market, 40)}</div>
+        <div class="signal-detail">${p.direction} $${p.size?.toFixed(0)} @ ${p.entry?.toFixed(3)} · edge ${p.edge}%</div>
+      </div>
+      <span style="font-size:11px;color:var(--text-2)">${p.age_s}s</span>
+    </div>
+  `).join('');
+}
+
+function updateGapRadar(sn) {
+  if (!sn) return;
+  const signals = sn.recent_signals || [];
+  const panel = document.getElementById('gap-panel');
+
+  if (signals.length === 0) {
+    panel.innerHTML = '<div class="empty-state">No gap signals detected</div>';
+    return;
+  }
+
+  panel.innerHTML = signals.map(s => `
+    <div class="signal-row ${s.direction === 'BUY' ? 'signal-buy' : 'signal-sell'}">
+      <div class="signal-info">
+        <div class="signal-market">${fmtShort(s.market, 50)}</div>
+        <div class="signal-detail">${s.trigger} · ${s.gap_cents?.toFixed(1)}¢ gap · ${s.reasoning}</div>
+      </div>
+      <span class="signal-badge ${urgencyClass(s.urgency)}">${s.urgency}</span>
+      <span style="font-size:13px;font-weight:600;color:${s.direction === 'BUY' ? 'var(--green)' : 'var(--red)'}">
+        ${s.edge_pct?.toFixed(1)}%
+      </span>
+    </div>
+  `).join('');
+}
+
+function updateEventLog(sn) {
+  if (!sn) return;
+  const events = sn.recent_signals || [];
+  const log = document.getElementById('event-log');
+
+  if (events.length === 0 && state.eventLog.length === 0) {
+    log.innerHTML = '<div class="empty-state">No events yet</div>';
+    return;
+  }
+
+  // Merge new signals into event log
+  events.forEach(e => {
+    const key = `${e.trigger}-${e.market?.substring(0,20)}`;
+    if (!state.eventLog.find(x => x.key === key)) {
+      state.eventLog.unshift({
+        key,
+        time: new Date(),
+        type: e.trigger,
+        msg: `${e.direction} ${e.gap_cents?.toFixed(1)}¢ gap on ${fmtShort(e.market, 40)}`,
+        color: e.direction === 'BUY' ? 'var(--green)' : 'var(--red)',
+      });
+    }
+  });
+
+  state.eventLog = state.eventLog.slice(0, 50);
+
+  log.innerHTML = state.eventLog.map(e => {
+    const t = e.time;
+    const ts = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    return `
+      <div class="log-entry">
+        <span class="log-time">${ts}</span>
+        <span class="log-type" style="color:${e.color || 'var(--text-1)'}">${e.type}</span>
+        <span class="log-msg">${e.msg}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateMeta(meta) {
+  if (!meta) return;
+  document.getElementById('meta-runs').textContent = meta.run_count || 0;
+  document.getElementById('meta-cost').textContent = fmt$(meta.total_llm_cost || 0, 4);
+
+  const adjs = meta.adjustment_history || [];
+  document.getElementById('meta-adjustments').textContent = adjs.length;
+  document.getElementById('meta-next-run').textContent =
+    meta.next_run_in_hours != null ? `${meta.next_run_in_hours}h` : '—';
+
+  const reportsDiv = document.getElementById('meta-reports');
+  const reports = meta.recent_reports || [];
+
+  if (reports.length === 0) {
+    reportsDiv.innerHTML = '<div class="empty-state">No reports yet (first run after 1h)</div>';
+    return;
+  }
+
+  reportsDiv.innerHTML = reports.reverse().map(r => `
+    <div class="meta-card">
+      <div class="meta-card-title">${r.time} · PnL ${fmt$(r.total_pnl)} · ${r.adjustments} adj · ${fmt$(r.cost, 4)} cost</div>
+      <div class="meta-card-text">${r.summary}</div>
+    </div>
+  `).join('');
+
+  // Recent adjustments
+  if (adjs.length > 0) {
+    reportsDiv.innerHTML += '<div style="margin-top:12px">' +
+      adjs.slice(-5).reverse().map(a => `
+        <div class="adj-row">
+          <span class="adj-engine">${a.engine?.toUpperCase()}</span>
+          <span class="adj-param">${a.parameter}</span>
+          <span class="adj-change">${a.old_value} → ${a.new_value}</span>
+        </div>
+      `).join('') + '</div>';
+  }
+}
+
+// ── Main Refresh Loop ──
+async function refresh() {
+  const [statusData, mmData, sniperData, metaData] = await Promise.all([
+    fetchJSON('/api/status'),
+    fetchJSON('/api/mm'),
+    fetchJSON('/api/sniper'),
+    fetchJSON('/api/meta'),
+  ]);
+
+  state.status = statusData;
+  state.mm = mmData;
+  state.sniper = sniperData;
+  state.meta = metaData;
+
+  updateHeader(statusData);
+  updateSystem(statusData);
+  updateMM(mmData);
+  updateSniper(sniperData);
+  updateGapRadar(sniperData);
+  updateEventLog(sniperData);
+  updateMeta(metaData);
+}
+
+// Start
+refresh();
+setInterval(refresh, REFRESH_MS);
+
+// Log startup
+console.log('PolyEdge v4 Dashboard initialized — refreshing every 5s');
+</script>
+</body>
+</html>
