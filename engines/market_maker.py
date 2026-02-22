@@ -571,8 +571,16 @@ class QuoteGenerator:
         Random jitter added for stealth.
         """
         # 1. Fair value estimation
+        # Use OU fair value only if well-calibrated (enough observations)
         ou_fair = self.ou.get_fair_value(token_id)
-        fair_value = ou_fair if ou_fair else current_mid
+        ou_params = self.ou._params.get(token_id)
+        ou_is_calibrated = ou_params and ou_params.n_obs >= self.ou.config.ou_min_observations
+        
+        if ou_is_calibrated and ou_fair is not None:
+            fair_value = ou_fair
+        else:
+            # Not enough data — trust the market mid
+            fair_value = current_mid
         
         # 2. Base half-spread
         half_spread = self.config.target_half_spread
