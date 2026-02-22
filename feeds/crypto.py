@@ -74,7 +74,10 @@ SYMBOL_KEYWORDS = {
     "SOLUSDT": ["solana", "sol", "crypto"],
 }
 
-WS_URL = "wss://stream.binance.com:9443/ws"
+WS_URL = "wss://stream.binance.us:9443/ws"
+WS_URL_FALLBACK = "wss://stream.binance.com:9443/ws"
+REST_URL = "https://api.binance.us/api/v3/ticker/price"
+REST_URL_FALLBACK = "https://api.binance.com/api/v3/ticker/price"
 
 
 # ─── Price History ───────────────────────────────────────────
@@ -146,35 +149,70 @@ class CryptoFeed:
         return events + pending
     
     async def _ws_loop(self):
-        """WebSocket connection loop with auto-reconnect."""
+        """WebSocket connection loop with auto-reconnect and REST fallback."""
         streams = "/".join(f"{s.lower()}@trade" for s in self.symbols)
-        url = f"{WS_URL}/{streams}"
+        ws_urls = [
+            f"{WS_URL}/{streams}",
+            f"{WS_URL_FALLBACK}/{streams}",
+        ]
+        ws_failures = 0
+        max_ws_failures = 3  # After 3 consecutive failures, switch to REST-only
+        
+        while self._started:
+            # If too many WS failures, fall back to REST polling
+            if ws_failures >= max_ws_failures:
+                logger.warning(f"WebSocket failed {ws_failures}x — switching to REST polling mode")
+                await self._rest_poll_loop()
+                return
+            
+            for url in ws_urls:
+                if not self._started:
+                    return
+                try:
+                    if self._session is None or self._session.closed:
+                        self._session = aiohttp.ClientSession()
+                    
+                    async with self._session.ws_connect(url, heartbeat=30, timeout=10) as ws:
+                        self._connected = True
+                        self._ws = ws
+                        ws_failures = 0  # Reset on successful connect
+                        logger.info(f"WebSocket connected: {', '.join(self.symbols)}")
+                        
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                self._handle_trade(json.loads(msg.data))
+                            elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                                break
+                    
+                    self._connected = False
+                    logger.warning("WebSocket disconnected, trying next URL...")
+                    
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    self._connected = False
+                    logger.warning(f"WebSocket {url[:50]}... failed: {e}")
+                    continue
+            
+            # Both URLs failed this round
+            ws_failures += 1
+            logger.warning(f"All WebSocket URLs failed (attempt {ws_failures}/{max_ws_failures}), retrying in 10s...")
+            await asyncio.sleep(10)
+    
+    async def _rest_poll_loop(self):
+        """REST-only polling mode — fallback when WebSocket is unavailable."""
+        logger.info("REST polling mode active — polling every 5s")
         
         while self._started:
             try:
-                if self._session is None or self._session.closed:
-                    self._session = aiohttp.ClientSession()
-                
-                async with self._session.ws_connect(url, heartbeat=30) as ws:
-                    self._connected = True
-                    self._ws = ws
-                    logger.info(f"WebSocket connected: {', '.join(self.symbols)}")
-                    
-                    async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            self._handle_trade(json.loads(msg.data))
-                        elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
-                            break
-                
-                self._connected = False
-                logger.warning("WebSocket disconnected, reconnecting in 5s...")
+                await self._rest_update()
+                events = self._check_events()
+                self._pending_events.extend(events)
                 await asyncio.sleep(5)
-                
             except asyncio.CancelledError:
-                break
+                return
             except Exception as e:
-                self._connected = False
-                logger.error(f"WebSocket error: {e}, reconnecting in 10s...")
+                logger.error(f"REST poll error: {e}")
                 await asyncio.sleep(10)
     
     def _handle_trade(self, data: Dict):
@@ -201,30 +239,39 @@ class CryptoFeed:
             state.history_1hr.append(point)
     
     async def _rest_update(self):
-        """REST API fallback when WebSocket isn't connected."""
+        """REST API fallback — tries Binance US, then global."""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         
-        try:
-            for symbol in self.symbols:
-                async with self._session.get(
-                    "https://api.binance.com/api/v3/ticker/price",
-                    params={"symbol": symbol},
-                    timeout=aiohttp.ClientTimeout(total=5),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        price = float(data["price"])
-                        state = self._states[symbol]
-                        state.current_price = price
-                        
-                        now = time.time()
-                        point = PricePoint(price=price, timestamp=now)
-                        state.history_5min.append(point)
-                        state.history_15min.append(point)
-                        state.history_1hr.append(point)
-        except Exception as e:
-            logger.error(f"REST update error: {e}")
+        for base_url in [REST_URL, REST_URL_FALLBACK]:
+            try:
+                for symbol in self.symbols:
+                    async with self._session.get(
+                        base_url,
+                        params={"symbol": symbol},
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            price = float(data["price"])
+                            state = self._states[symbol]
+                            state.current_price = price
+                            
+                            now = time.time()
+                            point = PricePoint(price=price, timestamp=now)
+                            state.history_5min.append(point)
+                            state.history_15min.append(point)
+                            state.history_1hr.append(point)
+                        elif resp.status == 451:
+                            raise aiohttp.ClientResponseError(
+                                resp.request_info, resp.history, status=451
+                            )
+                return  # Success, don't try next URL
+            except Exception as e:
+                logger.debug(f"REST {base_url[:40]}... failed: {e}, trying next...")
+                continue
+        
+        logger.error("All REST endpoints failed")
     
     def _check_events(self) -> List[FeedEvent]:
         """Check all symbols for triggerable events."""
