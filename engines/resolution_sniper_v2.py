@@ -1222,7 +1222,7 @@ class ResolutionSniperV2:
                 )
         else:
             # Live mode: place market order
-            order = await self.clob.place_order(
+            order = await self.clob.place_market_order(
                 token_id=signal.token_id,
                 side="BUY",
                 size=size,

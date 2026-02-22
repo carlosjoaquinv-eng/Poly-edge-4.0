@@ -521,22 +521,30 @@ Rules:
         self._run_count += 1
         logger.info(f"Meta Strategist run #{self._run_count}")
         
-        # Take snapshot
-        mm_s = mm_stats or {}
-        sniper_s = sniper_stats or {}
-        snapshot = self.analyzer.take_snapshot(mm_s, sniper_s)
+        try:
+            # Take snapshot
+            mm_s = mm_stats or {}
+            sniper_s = sniper_stats or {}
+            snapshot = self.analyzer.take_snapshot(mm_s, sniper_s)
+            
+            # Compute period metrics
+            period = self.analyzer.compute_period_metrics(self.config.run_interval_hours)
+            
+            # Build prompt for LLM
+            user_prompt = self._build_prompt(snapshot, period)
+            
+            # Call LLM
+            response_text, cost = await self.llm.analyze(self.SYSTEM_PROMPT, user_prompt)
+        except Exception as e:
+            logger.error(f"Meta run #{self._run_count} failed during data/LLM phase: {e}", exc_info=True)
+            return None
         
-        # Compute period metrics
-        period = self.analyzer.compute_period_metrics(self.config.run_interval_hours)
-        
-        # Build prompt for LLM
-        user_prompt = self._build_prompt(snapshot, period)
-        
-        # Call LLM
-        response_text, cost = await self.llm.analyze(self.SYSTEM_PROMPT, user_prompt)
-        
-        # Parse response
-        report = self._parse_response(response_text, snapshot, cost)
+        # Parse response (separate try — LLM may return garbage)
+        try:
+            report = self._parse_response(response_text, snapshot, cost)
+        except Exception as e:
+            logger.error(f"Meta run #{self._run_count} failed parsing LLM response: {e}")
+            return None
         
         if report:
             self._reports.append(report)
