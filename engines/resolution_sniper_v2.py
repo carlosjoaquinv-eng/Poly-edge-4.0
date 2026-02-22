@@ -241,24 +241,48 @@ class MarketMapper:
         
         for m in raw_markets:
             try:
-                tokens = m.get("tokens", [])
-                if len(tokens) < 2:
+                # Parse token IDs from Gamma API format
+                clob_token_ids_raw = m.get("clobTokenIds", "[]")
+                if isinstance(clob_token_ids_raw, str):
+                    import json as _json
+                    try:
+                        clob_token_ids = _json.loads(clob_token_ids_raw)
+                    except:
+                        clob_token_ids = []
+                elif isinstance(clob_token_ids_raw, list):
+                    clob_token_ids = clob_token_ids_raw
+                else:
+                    clob_token_ids = []
+                
+                if len(clob_token_ids) < 2:
                     continue
                 
-                cid = m.get("condition_id", "")
+                cid = m.get("conditionId", m.get("condition_id", ""))
                 question = m.get("question", "").lower()
                 category = m.get("category", "").lower()
                 
+                # Parse outcome prices for current_price
+                outcome_prices_raw = m.get("outcomePrices", "[]")
+                if isinstance(outcome_prices_raw, str):
+                    try:
+                        outcome_prices = _json.loads(outcome_prices_raw)
+                    except:
+                        outcome_prices = []
+                else:
+                    outcome_prices = outcome_prices_raw or []
+                
+                current_price = float(outcome_prices[0]) if outcome_prices else 0.5
+                
                 mapping = MarketMapping(
                     condition_id=cid,
-                    token_id_yes=tokens[0].get("token_id", ""),
-                    token_id_no=tokens[1].get("token_id", ""),
+                    token_id_yes=clob_token_ids[0],
+                    token_id_no=clob_token_ids[1],
                     question=m.get("question", ""),
                     category=category,
                     keywords=self._extract_keywords(question),
-                    current_price=float(tokens[0].get("price", 0.5)),
-                    liquidity=float(m.get("liquidity", 0)),
-                    end_date_iso=m.get("end_date_iso", ""),
+                    current_price=current_price,
+                    liquidity=float(m.get("liquidityNum", m.get("liquidity", 0)) or 0),
+                    end_date_iso=m.get("endDate", m.get("end_date_iso", "")),
                     last_updated=time.time(),
                 )
                 

@@ -800,18 +800,37 @@ class MarketMakerEngine:
         candidates = []
         for m in raw_markets:
             try:
-                tokens = m.get("tokens", [])
-                if len(tokens) < 2:
+                # Parse token IDs from Gamma API format
+                # Gamma returns clobTokenIds as JSON string: '["token1", "token2"]'
+                clob_token_ids_raw = m.get("clobTokenIds", "[]")
+                if isinstance(clob_token_ids_raw, str):
+                    import json as _json
+                    try:
+                        clob_token_ids = _json.loads(clob_token_ids_raw)
+                    except:
+                        clob_token_ids = []
+                elif isinstance(clob_token_ids_raw, list):
+                    clob_token_ids = clob_token_ids_raw
+                else:
+                    clob_token_ids = []
+                
+                if len(clob_token_ids) < 2:
                     continue
                 
-                # Get orderbook for spread calculation
-                token_yes = tokens[0].get("token_id", "")
-                ob = await self.clob.get_orderbook(token_yes)
-                if not ob:
-                    continue
+                token_yes = clob_token_ids[0]
+                token_no = clob_token_ids[1]
                 
-                best_bid = float(ob.get("bids", [{}])[0].get("price", 0)) if ob.get("bids") else 0
-                best_ask = float(ob.get("asks", [{}])[0].get("price", 0)) if ob.get("asks") else 0
+                # Use bestBid/bestAsk from Gamma if available (avoids extra API call)
+                best_bid = float(m.get("bestBid", 0) or 0)
+                best_ask = float(m.get("bestAsk", 0) or 0)
+                
+                # If not available, fetch orderbook
+                if best_bid <= 0 or best_ask <= 0:
+                    ob = await self.clob.get_orderbook(token_yes)
+                    if not ob:
+                        continue
+                    best_bid = float(ob.get("bids", [{}])[0].get("price", 0)) if ob.get("bids") else 0
+                    best_ask = float(ob.get("asks", [{}])[0].get("price", 0)) if ob.get("asks") else 0
                 
                 if best_bid <= 0 or best_ask <= 0 or best_ask <= best_bid:
                     continue
@@ -819,7 +838,7 @@ class MarketMakerEngine:
                 spread_cents = (best_ask - best_bid) * 100
                 
                 # Estimate hours to resolution
-                end_date = m.get("end_date_iso", "")
+                end_date = m.get("endDate", m.get("end_date_iso", ""))
                 hours_to_res = 720  # Default 30 days
                 if end_date:
                     try:
@@ -830,12 +849,12 @@ class MarketMakerEngine:
                         pass
                 
                 info = MarketInfo(
-                    condition_id=m.get("condition_id", ""),
+                    condition_id=m.get("conditionId", m.get("condition_id", "")),
                     token_id_yes=token_yes,
-                    token_id_no=tokens[1].get("token_id", "") if len(tokens) > 1 else "",
+                    token_id_no=token_no,
                     question=m.get("question", ""),
-                    liquidity=float(m.get("liquidity", 0)),
-                    volume_24h=float(m.get("volume_num_24h", m.get("volume", 0))),
+                    liquidity=float(m.get("liquidityNum", m.get("liquidity", 0)) or 0),
+                    volume_24h=float(m.get("volume24hr", m.get("volume", 0)) or 0),
                     best_bid=best_bid,
                     best_ask=best_ask,
                     spread_cents=spread_cents,
