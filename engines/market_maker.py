@@ -114,9 +114,9 @@ class InventoryState:
 class MMConfig:
     """Market Maker configuration — all tuneable parameters."""
     # Market selection
-    min_liquidity: float = 20_000       # $20K minimum market liquidity
-    min_spread_cents: float = 2.0       # 2¢ minimum spread to be profitable after fees
-    max_spread_cents: float = 8.0       # Too wide = toxic flow risk
+    min_liquidity: float = 5_000        # $5K minimum market liquidity
+    min_spread_cents: float = 0.5       # 0.5¢ minimum spread (Polymarket spreads are tight)
+    max_spread_cents: float = 10.0      # Too wide = toxic flow risk
     min_hours_to_resolution: float = 168  # 7 days minimum
     max_markets: int = 5                # Max simultaneous markets
     
