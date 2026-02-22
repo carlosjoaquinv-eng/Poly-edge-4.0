@@ -758,7 +758,7 @@ function updateMM(mm) {
       ask_size: q.ask ? parseFloat(q.ask.split('x')[1]) : 0,
       spread: q.bid && q.ask ? parseFloat(q.ask.split('x')[0]) - parseFloat(q.bid.split('x')[0]) : null,
       fair_value: q.fair_value,
-      market: tid.substring(0, 12) + '…',
+      market: q.question || tid.substring(0, 12) + '…',
     }));
   }
   updateQuotes(quotesArr);

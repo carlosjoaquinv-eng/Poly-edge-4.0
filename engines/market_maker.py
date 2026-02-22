@@ -1110,6 +1110,10 @@ class MarketMakerEngine:
                     "bid": f"{p.bid.price:.3f}x{p.bid.size:.0f}" if p.bid else None,
                     "ask": f"{p.ask.price:.3f}x{p.ask.size:.0f}" if p.ask else None,
                     "fair_value": round(p.fair_value, 4),
+                    "question": next(
+                        (m.question[:40] for m in self._active_markets if m.token_id_yes == tid),
+                        tid[:16] + "..."
+                    ),
                 }
                 for tid, p in self._active_quotes.items()
             },
