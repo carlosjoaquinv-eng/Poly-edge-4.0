@@ -73,10 +73,17 @@ class MarketInfo:
     spread_cents: float
     hours_to_resolution: float
     category: str = ""
+    slug: str = ""
     
     @property
     def mid_price(self) -> float:
         return (self.best_bid + self.best_ask) / 2.0 if self.best_bid and self.best_ask else 0.5
+    
+    @property
+    def url(self) -> str:
+        if self.slug:
+            return f"https://polymarket.com/event/{self.slug}"
+        return f"https://polymarket.com/markets/{self.condition_id}"
 
 @dataclass
 class OUParams:
@@ -954,6 +961,7 @@ class MarketMakerEngine:
                     spread_cents=spread_cents,
                     hours_to_resolution=hours_to_res,
                     category=m.get("category", ""),
+                    slug=m.get("slug", m.get("market_slug", "")),
                 )
                 candidates.append(info)
                 
@@ -1246,7 +1254,8 @@ class MarketMakerEngine:
             "active_markets": len(self._active_markets),
             "markets": [
                 {
-                    "question": m.question[:60],
+                    "question": m.question,
+                    "url": m.url,
                     "spread": f"{m.spread_cents:.1f}¢",
                     "liquidity": f"${m.liquidity:,.0f}",
                     "hours_to_res": round(m.hours_to_resolution, 0),
@@ -1259,8 +1268,12 @@ class MarketMakerEngine:
                     "ask": f"{p.ask.price:.3f}x{p.ask.size:.0f}" if p.ask else None,
                     "fair_value": round(p.fair_value, 4),
                     "question": next(
-                        (m.question[:40] for m in self._active_markets if m.token_id_yes == tid),
+                        (m.question for m in self._active_markets if m.token_id_yes == tid),
                         tid[:16] + "..."
+                    ),
+                    "url": next(
+                        (m.url for m in self._active_markets if m.token_id_yes == tid),
+                        ""
                     ),
                 }
                 for tid, p in self._active_quotes.items()

@@ -1043,7 +1043,7 @@ class SniperExecutor:
             "total_exposure": round(self._total_exposure, 2),
             "active_positions": [
                 {
-                    "market": t.signal.market_question[:50],
+                    "market": t.signal.market_question,
                     "direction": t.signal.direction,
                     "size": t.size,
                     "entry": t.fill_price,
@@ -1442,14 +1442,14 @@ class ResolutionSniperV2:
             "executor": self.executor.get_stats(),
             "recent_signals": [
                 {
-                    "market": s.market_question[:50],
+                    "market": s.market_question,
                     "gap_cents": round(s.gap_cents, 1),
                     "edge_pct": round(s.decayed_edge, 1),
                     "direction": s.direction,
                     "urgency": s.urgency.value,
                     "trigger": s.trigger_event.event_type.value,
                     "age_s": round(s.age_seconds, 0),
-                    "reasoning": s.reasoning[:80],
+                    "reasoning": s.reasoning,
                 }
                 for s in self.gap_detector.get_recent_signals(10)
             ],
