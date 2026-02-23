@@ -503,6 +503,48 @@ class InventoryManager:
                 if abs(p.net_position) > 0.01 or p.n_trades > 0
             }
         }
+    
+    def save_state(self) -> Dict:
+        """Serialize full inventory state for persistence."""
+        return {
+            "positions": {
+                tid: {
+                    "token_id": p.token_id,
+                    "net_position": p.net_position,
+                    "avg_entry": p.avg_entry,
+                    "realized_pnl": p.realized_pnl,
+                    "unrealized_pnl": p.unrealized_pnl,
+                    "total_bought": p.total_bought,
+                    "total_sold": p.total_sold,
+                    "n_trades": p.n_trades,
+                    "last_trade_at": p.last_trade_at,
+                }
+                for tid, p in self._positions.items()
+            },
+            "daily_pnl": self._daily_pnl,
+            "daily_pnl_reset": self._daily_pnl_reset,
+        }
+    
+    def load_state(self, state: Dict):
+        """Restore inventory state from persistence."""
+        if not state:
+            return
+        for tid, pdata in state.get("positions", {}).items():
+            pos = InventoryState(
+                token_id=pdata["token_id"],
+                net_position=pdata.get("net_position", 0.0),
+                avg_entry=pdata.get("avg_entry", 0.0),
+                realized_pnl=pdata.get("realized_pnl", 0.0),
+                unrealized_pnl=pdata.get("unrealized_pnl", 0.0),
+                total_bought=pdata.get("total_bought", 0.0),
+                total_sold=pdata.get("total_sold", 0.0),
+                n_trades=pdata.get("n_trades", 0),
+                last_trade_at=pdata.get("last_trade_at", 0.0),
+            )
+            self._positions[tid] = pos
+        self._daily_pnl = state.get("daily_pnl", 0.0)
+        self._daily_pnl_reset = state.get("daily_pnl_reset", 0.0)
+        logger.info(f"Restored {len(self._positions)} positions from state")
 
 
 # ─────────────────────────────────────────────
@@ -1249,3 +1291,31 @@ class MarketMakerEngine:
             "kill_switch": self.inventory.check_kill_switch(),
             "recent_paper_fills": self._paper_fills[-20:] if self._paper_mode else [],
         }
+    
+    def save_state(self) -> Dict:
+        """Save full engine state for persistence across restarts."""
+        return {
+            "started_at": self._started_at,
+            "quote_count": self._quote_count,
+            "fill_count": self._fill_count,
+            "total_spread_captured": self._total_spread_captured,
+            "paper_fills": self._paper_fills[-200:],  # Keep last 200 fills
+            "inventory": self.inventory.save_state(),
+        }
+    
+    def load_state(self, state: Dict):
+        """Restore engine state from persistence."""
+        if not state:
+            return
+        self._started_at = state.get("started_at", self._started_at)
+        self._quote_count = state.get("quote_count", 0)
+        self._fill_count = state.get("fill_count", 0)
+        self._total_spread_captured = state.get("total_spread_captured", 0.0)
+        self._paper_fills = state.get("paper_fills", [])
+        if "inventory" in state:
+            self.inventory.load_state(state["inventory"])
+        logger.info(
+            f"Restored MM state: {self._fill_count} fills, "
+            f"${self._total_spread_captured:.2f} spread captured, "
+            f"rpnl=${self.inventory.total_realized_pnl:.2f}"
+        )

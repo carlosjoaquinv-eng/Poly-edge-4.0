@@ -975,6 +975,20 @@ class PolyEdgeV4:
         # Launch everything
         self.logger.info("Starting all engines...")
         
+        # Restore state from last run (if any)
+        try:
+            mm_state = self.store.load("mm_state")
+            if mm_state:
+                self.mm.load_state(mm_state)
+                self.logger.info("✅ MM state restored from disk")
+            
+            sniper_state = self.store.load("sniper_state")
+            if sniper_state:
+                self.sniper.load_state(sniper_state)
+                self.logger.info("✅ Sniper state restored from disk")
+        except Exception as e:
+            self.logger.warning(f"Could not restore state: {e} — starting fresh")
+        
         try:
             await asyncio.gather(
                 self.mm.start(paper_mode=self.config.PAPER_MODE),
@@ -1001,10 +1015,16 @@ class PolyEdgeV4:
                 sniper_stats = self.sniper.get_stats() if self.sniper else {}
                 self.meta.analyzer.take_snapshot(mm_stats, sniper_stats, self.config.BANKROLL)
                 
-                # Persist state
+                # Persist stats (for dashboard)
                 self.store.save("mm_stats", mm_stats)
                 self.store.save("sniper_stats", sniper_stats)
                 self.store.save("meta_stats", self.meta.get_stats() if self.meta else {})
+                
+                # Persist full engine state (survives restarts)
+                if self.mm:
+                    self.store.save("mm_state", self.mm.save_state())
+                if self.sniper:
+                    self.store.save("sniper_state", self.sniper.save_state())
                 
             except Exception as e:
                 self.logger.error(f"Stats loop error: {e}")
@@ -1012,6 +1032,17 @@ class PolyEdgeV4:
     async def shutdown(self):
         """Graceful shutdown."""
         self.logger.info("Shutting down PolyEdge v4...")
+        
+        # Save state before stopping engines
+        try:
+            if self.mm:
+                self.store.save("mm_state", self.mm.save_state())
+                self.logger.info("💾 MM state saved to disk")
+            if self.sniper:
+                self.store.save("sniper_state", self.sniper.save_state())
+                self.logger.info("💾 Sniper state saved to disk")
+        except Exception as e:
+            self.logger.error(f"State save on shutdown failed: {e}")
         
         if self.mm:
             await self.mm.stop()

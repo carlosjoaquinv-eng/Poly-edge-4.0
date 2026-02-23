@@ -1053,6 +1053,56 @@ class SniperExecutor:
                 for t in self._active_trades if t.status == "filled"
             ],
         }
+    
+    def save_state(self) -> Dict:
+        """Save executor state for persistence."""
+        def _trade_to_dict(t: SniperTrade) -> Dict:
+            return {
+                "size": t.size,
+                "entry_price": t.entry_price,
+                "order_id": t.order_id,
+                "filled": t.filled,
+                "fill_price": t.fill_price,
+                "fill_time": t.fill_time,
+                "pnl": t.pnl,
+                "status": t.status,
+                "market_question": t.signal.market_question[:80] if t.signal else "",
+                "direction": t.signal.direction if t.signal else "",
+                "edge": t.signal.edge_cents if t.signal else 0,
+            }
+        return {
+            "active_trades": [_trade_to_dict(t) for t in self._active_trades],
+            "completed_trades": [_trade_to_dict(t) for t in self._completed_trades[-200:]],
+            "total_exposure": self._total_exposure,
+        }
+    
+    def load_state(self, state: Dict):
+        """Restore completed trades for stats continuity (active trades not restored)."""
+        if not state:
+            return
+        completed_data = state.get("completed_trades", [])
+        for td in completed_data:
+            from types import SimpleNamespace
+            fake_signal = SimpleNamespace(
+                market_question=td.get("market_question", ""),
+                direction=td.get("direction", ""),
+                edge_cents=td.get("edge", 0),
+                decayed_edge=td.get("edge", 0),
+                age_seconds=0,
+                is_expired=True,
+            )
+            trade = SniperTrade(
+                signal=fake_signal,
+                size=td.get("size", 0),
+                entry_price=td.get("entry_price", 0),
+                fill_price=td.get("fill_price", 0),
+                fill_time=td.get("fill_time", 0),
+                pnl=td.get("pnl", 0),
+                status=td.get("status", "completed"),
+                filled=td.get("filled", True),
+            )
+            self._completed_trades.append(trade)
+        logger.info(f"Restored {len(self._completed_trades)} completed sniper trades")
 
 
 # ─────────────────────────────────────────────
@@ -1404,3 +1454,27 @@ class ResolutionSniperV2:
                 for s in self.gap_detector.get_recent_signals(10)
             ],
         }
+    
+    def save_state(self) -> Dict:
+        """Save sniper engine state for persistence."""
+        return {
+            "started_at": self._started_at,
+            "events_processed": self._events_processed,
+            "gaps_detected": self._gaps_detected,
+            "trades_executed": self._trades_executed,
+            "executor": self.executor.save_state(),
+        }
+    
+    def load_state(self, state: Dict):
+        """Restore sniper engine state from persistence."""
+        if not state:
+            return
+        self._events_processed = state.get("events_processed", 0)
+        self._gaps_detected = state.get("gaps_detected", 0)
+        self._trades_executed = state.get("trades_executed", 0)
+        if "executor" in state:
+            self.executor.load_state(state["executor"])
+        logger.info(
+            f"Restored Sniper state: {self._trades_executed} trades, "
+            f"{self._gaps_detected} gaps detected"
+        )
