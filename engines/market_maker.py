@@ -920,6 +920,14 @@ class MarketMakerEngine:
         
         best_bid = float(ob.get("bids", [{}])[0].get("price", 0)) if ob.get("bids") else 0
         best_ask = float(ob.get("asks", [{}])[0].get("price", 0)) if ob.get("asks") else 0
+        
+        # Polymarket API may not sort — ensure we get true best bid/ask
+        bids = ob.get("bids", [])
+        asks = ob.get("asks", [])
+        if bids:
+            best_bid = max(float(b.get("price", 0)) for b in bids)
+        if asks:
+            best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
         mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.5
         
         # Record price for OU calibration
