@@ -124,7 +124,7 @@ class MMConfig:
     target_half_spread: float = 0.015   # 1.5¢ each side of fair value
     min_quote_size: float = 10.0        # $10 minimum quote size
     max_quote_size: float = 30.0        # $30 maximum quote size
-    quote_refresh_secs: float = 30.0    # Re-quote every 30s
+    quote_refresh_secs: float = 45.0    # Re-quote every 45s
     
     # Inventory limits
     max_position_per_market: float = 50.0   # $50 max per market
@@ -401,9 +401,14 @@ class InventoryManager:
         """Check if a buy would violate inventory limits."""
         pos = self.get_position(token_id)
         new_position = pos.net_position + size
-        new_notional = new_position * price
         
+        # Check absolute notional at avg entry (accumulated cost basis)
+        new_notional = abs(new_position) * max(pos.avg_entry, price)
         if new_notional > self.config.max_position_per_market:
+            return False
+        
+        # Also hard-cap on raw units to prevent runaway accumulation
+        if abs(new_position) * price > self.config.max_position_per_market * 1.5:
             return False
         
         if self.total_exposure + (size * price) > self.config.max_total_inventory:
@@ -415,9 +420,14 @@ class InventoryManager:
         """Check if a sell would violate limits."""
         pos = self.get_position(token_id)
         new_position = pos.net_position - size
-        new_notional = abs(new_position) * price
         
+        # Check absolute notional at avg entry
+        new_notional = abs(new_position) * max(pos.avg_entry, price)
         if new_notional > self.config.max_position_per_market:
+            return False
+        
+        # Hard-cap on raw units
+        if abs(new_position) * price > self.config.max_position_per_market * 1.5:
             return False
         
         return True
@@ -1015,15 +1025,14 @@ class MarketMakerEngine:
         """
         Paper mode fill simulation — probabilistic model.
         
-        Models realistic queue priority:
-        - Market crosses our level: 95% fill
-        - Within 1¢ of our level: 40% fill (aggressive flow)
-        - Within 2¢: 15% fill (some flow reaching us)
-        - Within 3¢: 5% fill (occasional)
-        - Beyond 3¢: 0%
+        Models realistic queue priority and time-in-queue:
+        - Market crosses our level: 70% fill (not guaranteed — queue priority)
+        - Within 1¢ of our level: 15% fill (aggressive flow, we're deep in queue)
+        - Within 2¢: 5% fill (rare, only large sweeps)
+        - Beyond 2¢: 0%
         
-        Each cycle is ~30s, so with 5 markets this produces
-        realistic fill rates of 2-8 fills/hour.
+        Each cycle is ~45s, so with 5 markets this produces
+        realistic fill rates of 2-5 fills/hour.
         """
         if not pair.bid or not pair.ask:
             return
@@ -1042,62 +1051,64 @@ class MarketMakerEngine:
             )
         
         # BID side: fills when sellers come down to our level
-        # Distance = how far the market ask (best seller) is from our bid
         bid_distance = abs(market_ask - pair.bid.price)
         if market_ask <= pair.bid.price:
-            fill_prob = 0.95  # Market crossed us
+            fill_prob = 0.70  # Market crossed us — queue priority matters
         elif bid_distance <= 0.01:
-            fill_prob = 0.40  # Within 1¢
+            fill_prob = 0.15  # Within 1¢
         elif bid_distance <= 0.02:
-            fill_prob = 0.15  # Within 2¢
-        elif bid_distance <= 0.03:
-            fill_prob = 0.05  # Within 3¢
+            fill_prob = 0.05  # Within 2¢
         else:
             fill_prob = 0.0
         
+        # Re-check inventory before filling
         if fill_prob > 0 and random.random() < fill_prob:
-            self.inventory.record_fill(
-                token_id, "BUY", pair.bid.price, pair.bid.size
-            )
-            self._fill_count += 1
-            self._total_spread_captured += pair.fair_value - pair.bid.price
-            self._paper_fills.append({
-                "time": time.time(),
-                "token_id": token_id,
-                "side": "BUY",
-                "price": pair.bid.price,
-                "size": pair.bid.size,
-            })
-            logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%}, dist={bid_distance:.4f})")
+            if self.inventory.can_buy(token_id, pair.bid.size, pair.bid.price):
+                self.inventory.record_fill(
+                    token_id, "BUY", pair.bid.price, pair.bid.size
+                )
+                self._fill_count += 1
+                self._total_spread_captured += pair.fair_value - pair.bid.price
+                self._paper_fills.append({
+                    "time": time.time(),
+                    "token_id": token_id,
+                    "side": "BUY",
+                    "price": pair.bid.price,
+                    "size": pair.bid.size,
+                })
+                logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%}, dist={bid_distance:.4f})")
+            else:
+                logger.debug(f"⛔ BUY fill blocked by inventory limit on {token_id[:8]}")
         
         # ASK side: fills when buyers come up to our level
-        # Distance = how far the market bid (best buyer) is from our ask
         ask_distance = abs(pair.ask.price - market_bid)
         if market_bid >= pair.ask.price:
-            fill_prob = 0.95  # Market crossed us
+            fill_prob = 0.70  # Market crossed us
         elif ask_distance <= 0.01:
-            fill_prob = 0.40  # Within 1¢
+            fill_prob = 0.15  # Within 1¢
         elif ask_distance <= 0.02:
-            fill_prob = 0.15  # Within 2¢
-        elif ask_distance <= 0.03:
-            fill_prob = 0.05  # Within 3¢
+            fill_prob = 0.05  # Within 2¢
         else:
             fill_prob = 0.0
         
+        # Re-check inventory before filling
         if fill_prob > 0 and random.random() < fill_prob:
-            self.inventory.record_fill(
-                token_id, "SELL", pair.ask.price, pair.ask.size
-            )
-            self._fill_count += 1
-            self._total_spread_captured += pair.ask.price - pair.fair_value
-            self._paper_fills.append({
-                "time": time.time(),
-                "token_id": token_id,
-                "side": "SELL",
-                "price": pair.ask.price,
-                "size": pair.ask.size,
-            })
-            logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%}, dist={ask_distance:.4f})")
+            if self.inventory.can_sell(token_id, pair.ask.size, pair.ask.price):
+                self.inventory.record_fill(
+                    token_id, "SELL", pair.ask.price, pair.ask.size
+                )
+                self._fill_count += 1
+                self._total_spread_captured += pair.ask.price - pair.fair_value
+                self._paper_fills.append({
+                    "time": time.time(),
+                    "token_id": token_id,
+                    "side": "SELL",
+                    "price": pair.ask.price,
+                    "size": pair.ask.size,
+                })
+                logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%}, dist={ask_distance:.4f})")
+            else:
+                logger.debug(f"⛔ SELL fill blocked by inventory limit on {token_id[:8]}")
     
     async def _cancel_quotes(self, token_id: str):
         """Cancel existing quotes for a token."""
