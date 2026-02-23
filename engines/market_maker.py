@@ -114,7 +114,7 @@ class InventoryState:
 class MMConfig:
     """Market Maker configuration — all tuneable parameters."""
     # Market selection
-    min_liquidity: float = 5_000        # $5K minimum market liquidity
+    min_liquidity: float = 20_000       # $20K minimum market liquidity
     min_spread_cents: float = 0.5       # 0.5¢ minimum spread (Polymarket spreads are tight)
     max_spread_cents: float = 10.0      # Too wide = toxic flow risk
     min_hours_to_resolution: float = 168  # 7 days minimum
@@ -338,19 +338,48 @@ class InventoryManager:
         notional = price * size
         
         if side == "BUY":
-            # Update average entry
-            total_cost = pos.avg_entry * pos.net_position + notional
-            pos.net_position += size
-            if pos.net_position > 0:
-                pos.avg_entry = total_cost / pos.net_position
-            pos.total_bought += notional
-        else:  # SELL
-            # Realize PnL
-            if pos.net_position > 0:
-                pnl = (price - pos.avg_entry) * min(size, pos.net_position)
+            if pos.net_position < 0:
+                # Covering a short: realize PnL on the covered portion
+                cover_size = min(size, abs(pos.net_position))
+                pnl = (pos.avg_entry - price) * cover_size  # short sold high, buying low = profit
                 pos.realized_pnl += pnl
                 self._daily_pnl += pnl
-            pos.net_position -= size
+                remaining = size - cover_size
+                pos.net_position += cover_size
+                if remaining > 0:
+                    # Flipping to long with the remaining
+                    pos.avg_entry = price
+                    pos.net_position += remaining
+            else:
+                # Adding to long position
+                total_cost = pos.avg_entry * pos.net_position + notional
+                pos.net_position += size
+                if pos.net_position > 0:
+                    pos.avg_entry = total_cost / pos.net_position
+            pos.total_bought += notional
+        else:  # SELL
+            if pos.net_position > 0:
+                # Selling from a long: realize PnL on the sold portion
+                sell_size = min(size, pos.net_position)
+                pnl = (price - pos.avg_entry) * sell_size
+                pos.realized_pnl += pnl
+                self._daily_pnl += pnl
+                remaining = size - sell_size
+                pos.net_position -= sell_size
+                if remaining > 0:
+                    # Flipping to short with the remaining
+                    pos.avg_entry = price
+                    pos.net_position -= remaining
+            else:
+                # Adding to short position
+                if pos.net_position < 0:
+                    total_cost = pos.avg_entry * abs(pos.net_position) + notional
+                    pos.net_position -= size
+                    pos.avg_entry = total_cost / abs(pos.net_position)
+                else:
+                    # Opening new short
+                    pos.avg_entry = price
+                    pos.net_position -= size
             pos.total_sold += notional
         
         pos.n_trades += 1
@@ -838,8 +867,12 @@ class MarketMakerEngine:
                     ob = await self.clob.get_orderbook(token_yes)
                     if not ob:
                         continue
-                    best_bid = float(ob.get("bids", [{}])[0].get("price", 0)) if ob.get("bids") else 0
-                    best_ask = float(ob.get("asks", [{}])[0].get("price", 0)) if ob.get("asks") else 0
+                    bids = ob.get("bids", [])
+                    asks = ob.get("asks", [])
+                    if bids:
+                        best_bid = max(float(b.get("price", 0)) for b in bids)
+                    if asks:
+                        best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
                 
                 if best_bid <= 0 or best_ask <= 0 or best_ask <= best_bid:
                     continue
@@ -918,12 +951,11 @@ class MarketMakerEngine:
         if not ob:
             return
         
-        best_bid = float(ob.get("bids", [{}])[0].get("price", 0)) if ob.get("bids") else 0
-        best_ask = float(ob.get("asks", [{}])[0].get("price", 0)) if ob.get("asks") else 0
-        
         # Polymarket API may not sort — ensure we get true best bid/ask
         bids = ob.get("bids", [])
         asks = ob.get("asks", [])
+        best_bid = 0
+        best_ask = 0
         if bids:
             best_bid = max(float(b.get("price", 0)) for b in bids)
         if asks:
@@ -1028,6 +1060,7 @@ class MarketMakerEngine:
                 token_id, "BUY", pair.bid.price, pair.bid.size
             )
             self._fill_count += 1
+            self._total_spread_captured += pair.fair_value - pair.bid.price
             self._paper_fills.append({
                 "time": time.time(),
                 "token_id": token_id,
@@ -1115,7 +1148,9 @@ class MarketMakerEngine:
                         bids = ob.get("bids", [])
                         asks = ob.get("asks", [])
                         if bids and asks:
-                            mid = (float(bids[0]["price"]) + float(asks[0]["price"])) / 2
+                            best_bid = max(float(b.get("price", 0)) for b in bids)
+                            best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
+                            mid = (best_bid + best_ask) / 2
                             self.inventory.update_unrealized(token_id, mid)
                 
             except Exception as e:

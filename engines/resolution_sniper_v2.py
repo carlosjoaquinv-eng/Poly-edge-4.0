@@ -1251,7 +1251,7 @@ class ResolutionSniperV2:
                 )
         else:
             # Live mode: place market order
-            order = await self.clob.place_market_order(
+            order = await self.clob.place_order(
                 token_id=signal.token_id,
                 side="BUY",
                 size=size,
@@ -1306,12 +1306,23 @@ class ResolutionSniperV2:
                             current_price = current_price_raw
                     else:
                         # Paper mode: simulate price movement toward fair value
+                        # BUT with realistic noise and probability of wrong estimate
                         elapsed = time.time() - trade.fill_time
                         convergence = 1 - math.exp(-elapsed / 120)  # 2-min half-life
+                        
+                        # 30% chance the fair value estimate is partially wrong
+                        # Model: actual_target = fair_value + error, where error ~ N(0, gap*0.4)
+                        if not hasattr(trade, '_sim_target'):
+                            gap = abs(trade.signal.fair_value - trade.fill_price)
+                            error = random.gauss(0, gap * 0.4)
+                            trade._sim_target = trade.signal.fair_value + error
+                            trade._sim_target = max(0.02, min(0.98, trade._sim_target))
+                        
                         current_price = trade.fill_price + \
-                            (trade.signal.fair_value - trade.fill_price) * convergence
-                        # Add noise
-                        current_price += random.gauss(0, 0.005)
+                            (trade._sim_target - trade.fill_price) * convergence
+                        # Add market noise
+                        current_price += random.gauss(0, 0.008)
+                        current_price = max(0.01, min(0.99, current_price))
                     
                     if current_price is None:
                         continue

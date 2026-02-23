@@ -389,7 +389,7 @@ class TelegramNotifier:
             f"Events: {s.get('events_processed', 0)} | "
             f"Gaps: {gd.get('total_signals', 0)}\n"
             f"Trades: {ex.get('completed_trades', 0)} | "
-            f"WR: {ex.get('win_rate', 0):.0%}\n"
+            f"WR: {ex.get('win_rate', 0):.0f}%\n"
             f"PnL: ${ex.get('total_pnl', 0):+.2f}\n"
             f"Active positions: {ex.get('active_trades', 0)}"
         )
@@ -489,7 +489,7 @@ class TelegramNotifier:
             f"🎯 Sniper:\n"
             f"  Total: ${sn_total:+.2f}\n"
             f"  Trades: {sn_ex.get('completed_trades', 0)}\n"
-            f"  WR: {sn_ex.get('win_rate', 0):.0%}\n"
+            f"  WR: {sn_ex.get('win_rate', 0):.0f}%\n"
             f"\n"
             f"<b>Total: ${grand:+.2f} ({roi:+.1f}% ROI)</b>"
         )
@@ -958,6 +958,9 @@ class PolyEdgeV4:
         
         # Wire telegram commands to engines
         self.telegram.set_engines(self.mm, self.sniper, self.meta)
+        
+        # Wire live configs to meta-strategist for prompt building
+        self.meta.set_configs(self.config.mm, self.config.sniper)
         
         # Start notification
         mode = "PAPER" if self.config.PAPER_MODE else "🔴 LIVE"

@@ -471,6 +471,13 @@ Rules:
         self._reports: List[MetaReport] = []
         self._started_at = 0.0
         self._run_count = 0
+        self._mm_config = None      # Set via set_configs()
+        self._sniper_config = None   # Set via set_configs()
+    
+    def set_configs(self, mm_config=None, sniper_config=None):
+        """Store live config references for prompt building."""
+        self._mm_config = mm_config
+        self._sniper_config = sniper_config
     
     # ── Lifecycle ──
     
@@ -606,21 +613,21 @@ Rules:
 ## Period Metrics ({period.get('period_hours', 12)}h)
 {json.dumps(period, indent=2)}
 
-## Current Parameters
+## Current Parameters (loaded from live config)
 ### MM Config
-- target_half_spread: 0.015
-- max_position_per_market: 50.0
-- max_total_inventory: 200.0
-- kelly_fraction: 0.25
-- min_liquidity: 20000
-- min_spread_cents: 2.0
+- target_half_spread: {self._mm_config.target_half_spread if self._mm_config else 0.015}
+- max_position_per_market: {self._mm_config.max_position_per_market if self._mm_config else 50.0}
+- max_total_inventory: {self._mm_config.max_total_inventory if self._mm_config else 200.0}
+- kelly_fraction: {self._mm_config.kelly_fraction if self._mm_config else 0.25}
+- min_liquidity: {self._mm_config.min_liquidity if self._mm_config else 20000}
+- min_spread_cents: {self._mm_config.min_spread_cents if self._mm_config else 0.5}
 
 ### Sniper Config
-- min_gap_cents: 3.0
-- min_edge_pct: 3.0
-- max_trade_size: 75.0
-- max_total_exposure: 300.0
-- kelly_fraction: 0.3
+- min_gap_cents: {self._sniper_config.min_gap_cents if self._sniper_config else 3.0}
+- min_edge_pct: {self._sniper_config.min_edge_pct if self._sniper_config else 3.0}
+- max_trade_size: {self._sniper_config.max_trade_size if self._sniper_config else 75.0}
+- max_total_exposure: {self._sniper_config.max_total_exposure if self._sniper_config else 300.0}
+- kelly_fraction: {self._sniper_config.kelly_fraction if self._sniper_config else 0.3}
 
 Provide your analysis and recommended parameter adjustments as JSON."""
 
