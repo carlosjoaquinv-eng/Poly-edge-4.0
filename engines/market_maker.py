@@ -973,19 +973,36 @@ class MarketMakerEngine:
     def _simulate_fills(self, token_id: str, pair: QuotePair,
                         market_bid: float, market_ask: float):
         """
-        Paper mode fill simulation.
+        Paper mode fill simulation — probabilistic model.
         
-        A quote fills if:
-          - BID fills when market_ask <= our bid (someone lifts our bid)
-          - ASK fills when market_bid >= our ask (someone hits our ask)
+        Fill probability scales with how close market price is to our quote:
+        - If market crosses our level: 80% fill (would definitely fill, minus queue)
+        - Within half-spread: 30% fill (aggressive flow touching our level)
+        - Within full spread: 10% fill (some flow reaching us)
+        - Beyond spread: 0% (too far)
         
-        In reality fills depend on queue priority and flow.
-        We simulate ~20% fill rate for conservative estimation.
+        This models realistic queue priority and flow patterns.
+        Each cycle is ~30s, so 10% per cycle ≈ a few fills per hour per market.
         """
-        fill_probability = 0.20  # Conservative: 20% chance per refresh cycle
+        if not pair.bid or not pair.ask:
+            return
         
-        if pair.bid and market_ask <= pair.bid.price + 0.005:
-            if random.random() < fill_probability:
+        spread = pair.ask.price - pair.bid.price
+        half_spread = spread / 2
+        
+        # BID side: fills when sellers come down to our level
+        if pair.bid:
+            distance = market_ask - pair.bid.price  # How far market is from our bid
+            if distance <= 0:
+                fill_prob = 0.80  # Market crossed us
+            elif distance <= half_spread:
+                fill_prob = 0.30  # Within half-spread
+            elif distance <= spread:
+                fill_prob = 0.10  # Within full spread
+            else:
+                fill_prob = 0.0
+            
+            if fill_prob > 0 and random.random() < fill_prob:
                 self.inventory.record_fill(
                     token_id, "BUY", pair.bid.price, pair.bid.size
                 )
@@ -997,10 +1014,21 @@ class MarketMakerEngine:
                     "price": pair.bid.price,
                     "size": pair.bid.size,
                 })
-                logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f}")
+                logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%})")
         
-        if pair.ask and market_bid >= pair.ask.price - 0.005:
-            if random.random() < fill_probability:
+        # ASK side: fills when buyers come up to our level
+        if pair.ask:
+            distance = pair.ask.price - market_bid  # How far market is from our ask
+            if distance <= 0:
+                fill_prob = 0.80
+            elif distance <= half_spread:
+                fill_prob = 0.30
+            elif distance <= spread:
+                fill_prob = 0.10
+            else:
+                fill_prob = 0.0
+            
+            if fill_prob > 0 and random.random() < fill_prob:
                 self.inventory.record_fill(
                     token_id, "SELL", pair.ask.price, pair.ask.size
                 )
@@ -1013,7 +1041,7 @@ class MarketMakerEngine:
                     "price": pair.ask.price,
                     "size": pair.ask.size,
                 })
-                logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f}")
+                logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%})")
     
     async def _cancel_quotes(self, token_id: str):
         """Cancel existing quotes for a token."""
