@@ -731,6 +731,7 @@ class MarketMakerEngine:
         self._running = False
         self._paper_mode = True
         self._paper_fills: List[Dict] = []  # Simulated fills for paper mode
+        self._force_kill = False  # Manual kill via /stop command
         
         # Stats
         self._started_at = 0.0
@@ -891,8 +892,8 @@ class MarketMakerEngine:
         
         while self._running:
             try:
-                if self.inventory.check_kill_switch():
-                    logger.warning("KILL SWITCH ACTIVE — daily loss limit exceeded")
+                if self._force_kill or self.inventory.check_kill_switch():
+                    logger.warning("KILL SWITCH ACTIVE — trading paused")
                     await asyncio.sleep(60)
                     continue
                 

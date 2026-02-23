@@ -1088,6 +1088,7 @@ class ResolutionSniperV2:
         # State
         self._running = False
         self._paper_mode = True
+        self._paused = False  # Manual pause via /stop command
         self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._raw_markets: List[Dict] = []
         
@@ -1154,6 +1155,10 @@ class ResolutionSniperV2:
         """Process events from the queue as they arrive."""
         while self._running:
             try:
+                if self._paused:
+                    await asyncio.sleep(5)
+                    continue
+                
                 # Wait for event with timeout
                 try:
                     event = await asyncio.wait_for(

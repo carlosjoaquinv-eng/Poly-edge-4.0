@@ -467,6 +467,7 @@ Rules:
         self.adjuster = ParameterAdjuster(config)
         
         self._running = False
+        self._paused = False  # Manual pause via /stop command
         self._reports: List[MetaReport] = []
         self._started_at = 0.0
         self._run_count = 0
@@ -504,6 +505,9 @@ Rules:
         
         while self._running:
             try:
+                if self._paused:
+                    await asyncio.sleep(30)
+                    continue
                 await self.run_analysis()
             except Exception as e:
                 logger.error(f"Meta analysis error: {e}", exc_info=True)

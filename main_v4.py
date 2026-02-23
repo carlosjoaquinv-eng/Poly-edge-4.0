@@ -253,7 +253,9 @@ class TelegramNotifier:
             {"command": "positions", "description": "📋 Sniper positions"},
             {"command": "pnl", "description": "💰 P&L summary"},
             {"command": "feeds", "description": "📡 Feed status"},
-            {"command": "kill", "description": "🛑 Toggle kill switch"},
+            {"command": "kill", "description": "🛑 Toggle MM kill switch"},
+            {"command": "stop", "description": "⏹ STOP all engines"},
+            {"command": "resume", "description": "▶️ Resume all engines"},
             {"command": "help", "description": "❓ Show commands"},
         ]
         try:
@@ -297,6 +299,8 @@ class TelegramNotifier:
             "/pnl": self._cmd_pnl,
             "/feeds": self._cmd_feeds,
             "/kill": self._cmd_kill,
+            "/stop": self._cmd_stop,
+            "/resume": self._cmd_resume,
             "/help": self._cmd_help,
             "/start": self._cmd_help,
         }
@@ -503,19 +507,70 @@ class TelegramNotifier:
         await self.send(msg)
     
     async def _cmd_kill(self):
+        """Toggle MM kill switch only."""
         mm = self._engines.get("mm")
         if not mm:
             await self.send("❌ MM not available")
             return
         
-        # Toggle kill switch
-        current = mm.get_stats().get("kill_switch", False)
-        if hasattr(mm, '_kill_switch'):
-            mm._kill_switch = not current
-            new_state = "🔴 ACTIVATED" if not current else "🟢 DEACTIVATED"
-            await self.send(f"🛑 Kill switch {new_state}")
-        else:
-            await self.send(f"Kill switch: {'🔴 ON' if current else '🟢 OFF'} (toggle not supported)")
+        current = mm._force_kill
+        mm._force_kill = not current
+        new_state = "🔴 ACTIVATED" if not current else "🟢 DEACTIVATED"
+        await self.send(f"🛑 MM Kill switch {new_state}")
+    
+    async def _cmd_stop(self):
+        """STOP ALL — freeze MM + Sniper + Meta. No new trades, no new quotes."""
+        mm = self._engines.get("mm")
+        sn = self._engines.get("sniper")
+        mt = self._engines.get("meta")
+        
+        stopped = []
+        if mm:
+            mm._force_kill = True
+            stopped.append("MM")
+        if sn:
+            sn._paused = True
+            stopped.append("Sniper")
+        if mt:
+            mt._paused = True
+            stopped.append("Meta")
+        
+        self._all_stopped = True
+        engines_txt = ", ".join(stopped) if stopped else "none"
+        await self.send(
+            f"🛑 <b>ALL ENGINES STOPPED</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"Frozen: {engines_txt}\n"
+            f"No new trades or quotes will be placed.\n"
+            f"Existing positions remain open.\n\n"
+            f"Type /resume to reactivate."
+        )
+    
+    async def _cmd_resume(self):
+        """Resume all engines."""
+        mm = self._engines.get("mm")
+        sn = self._engines.get("sniper")
+        mt = self._engines.get("meta")
+        
+        resumed = []
+        if mm:
+            mm._force_kill = False
+            resumed.append("MM")
+        if sn:
+            sn._paused = False
+            resumed.append("Sniper")
+        if mt:
+            mt._paused = False
+            resumed.append("Meta")
+        
+        self._all_stopped = False
+        engines_txt = ", ".join(resumed) if resumed else "none"
+        await self.send(
+            f"▶️ <b>ALL ENGINES RESUMED</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"Reactivated: {engines_txt}\n"
+            f"Trading active again."
+        )
     
     async def _cmd_help(self):
         msg = (
@@ -529,7 +584,9 @@ class TelegramNotifier:
             f"/positions — 📋 Sniper positions\n"
             f"/pnl — 💰 P&L summary\n"
             f"/feeds — 📡 Feed status\n"
-            f"/kill — 🛑 Toggle kill switch\n"
+            f"/kill — 🛑 Toggle MM kill switch\n"
+            f"/stop — ⏹ STOP all engines\n"
+            f"/resume — ▶️ Resume all engines\n"
         )
         await self.send(msg)
     
