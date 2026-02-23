@@ -975,73 +975,88 @@ class MarketMakerEngine:
         """
         Paper mode fill simulation — probabilistic model.
         
-        Fill probability scales with how close market price is to our quote:
-        - If market crosses our level: 80% fill (would definitely fill, minus queue)
-        - Within half-spread: 30% fill (aggressive flow touching our level)
-        - Within full spread: 10% fill (some flow reaching us)
-        - Beyond spread: 0% (too far)
+        Models realistic queue priority:
+        - Market crosses our level: 95% fill
+        - Within 1¢ of our level: 40% fill (aggressive flow)
+        - Within 2¢: 15% fill (some flow reaching us)
+        - Within 3¢: 5% fill (occasional)
+        - Beyond 3¢: 0%
         
-        This models realistic queue priority and flow patterns.
-        Each cycle is ~30s, so 10% per cycle ≈ a few fills per hour per market.
+        Each cycle is ~30s, so with 5 markets this produces
+        realistic fill rates of 2-8 fills/hour.
         """
         if not pair.bid or not pair.ask:
             return
         
-        spread = pair.ask.price - pair.bid.price
-        half_spread = spread / 2
+        # Log periodically for diagnostics (every 100th call per token)
+        if not hasattr(self, '_fill_sim_counter'):
+            self._fill_sim_counter = {}
+        self._fill_sim_counter[token_id] = self._fill_sim_counter.get(token_id, 0) + 1
+        if self._fill_sim_counter[token_id] % 100 == 1:
+            logger.info(
+                f"📊 Fill sim [{token_id[:8]}]: "
+                f"our_bid={pair.bid.price:.4f} our_ask={pair.ask.price:.4f} "
+                f"mkt_bid={market_bid:.4f} mkt_ask={market_ask:.4f} "
+                f"bid_dist={abs(market_ask - pair.bid.price):.4f} "
+                f"ask_dist={abs(pair.ask.price - market_bid):.4f}"
+            )
         
         # BID side: fills when sellers come down to our level
-        if pair.bid:
-            distance = market_ask - pair.bid.price  # How far market is from our bid
-            if distance <= 0:
-                fill_prob = 0.80  # Market crossed us
-            elif distance <= half_spread:
-                fill_prob = 0.30  # Within half-spread
-            elif distance <= spread:
-                fill_prob = 0.10  # Within full spread
-            else:
-                fill_prob = 0.0
-            
-            if fill_prob > 0 and random.random() < fill_prob:
-                self.inventory.record_fill(
-                    token_id, "BUY", pair.bid.price, pair.bid.size
-                )
-                self._fill_count += 1
-                self._paper_fills.append({
-                    "time": time.time(),
-                    "token_id": token_id,
-                    "side": "BUY",
-                    "price": pair.bid.price,
-                    "size": pair.bid.size,
-                })
-                logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%})")
+        # Distance = how far the market ask (best seller) is from our bid
+        bid_distance = abs(market_ask - pair.bid.price)
+        if market_ask <= pair.bid.price:
+            fill_prob = 0.95  # Market crossed us
+        elif bid_distance <= 0.01:
+            fill_prob = 0.40  # Within 1¢
+        elif bid_distance <= 0.02:
+            fill_prob = 0.15  # Within 2¢
+        elif bid_distance <= 0.03:
+            fill_prob = 0.05  # Within 3¢
+        else:
+            fill_prob = 0.0
+        
+        if fill_prob > 0 and random.random() < fill_prob:
+            self.inventory.record_fill(
+                token_id, "BUY", pair.bid.price, pair.bid.size
+            )
+            self._fill_count += 1
+            self._paper_fills.append({
+                "time": time.time(),
+                "token_id": token_id,
+                "side": "BUY",
+                "price": pair.bid.price,
+                "size": pair.bid.size,
+            })
+            logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%}, dist={bid_distance:.4f})")
         
         # ASK side: fills when buyers come up to our level
-        if pair.ask:
-            distance = pair.ask.price - market_bid  # How far market is from our ask
-            if distance <= 0:
-                fill_prob = 0.80
-            elif distance <= half_spread:
-                fill_prob = 0.30
-            elif distance <= spread:
-                fill_prob = 0.10
-            else:
-                fill_prob = 0.0
-            
-            if fill_prob > 0 and random.random() < fill_prob:
-                self.inventory.record_fill(
-                    token_id, "SELL", pair.ask.price, pair.ask.size
-                )
-                self._fill_count += 1
-                self._total_spread_captured += pair.ask.price - pair.fair_value
-                self._paper_fills.append({
-                    "time": time.time(),
-                    "token_id": token_id,
-                    "side": "SELL",
-                    "price": pair.ask.price,
-                    "size": pair.ask.size,
-                })
-                logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%})")
+        # Distance = how far the market bid (best buyer) is from our ask
+        ask_distance = abs(pair.ask.price - market_bid)
+        if market_bid >= pair.ask.price:
+            fill_prob = 0.95  # Market crossed us
+        elif ask_distance <= 0.01:
+            fill_prob = 0.40  # Within 1¢
+        elif ask_distance <= 0.02:
+            fill_prob = 0.15  # Within 2¢
+        elif ask_distance <= 0.03:
+            fill_prob = 0.05  # Within 3¢
+        else:
+            fill_prob = 0.0
+        
+        if fill_prob > 0 and random.random() < fill_prob:
+            self.inventory.record_fill(
+                token_id, "SELL", pair.ask.price, pair.ask.size
+            )
+            self._fill_count += 1
+            self._total_spread_captured += pair.ask.price - pair.fair_value
+            self._paper_fills.append({
+                "time": time.time(),
+                "token_id": token_id,
+                "side": "SELL",
+                "price": pair.ask.price,
+                "size": pair.ask.size,
+            })
+            logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%}, dist={ask_distance:.4f})")
     
     async def _cancel_quotes(self, token_id: str):
         """Cancel existing quotes for a token."""
