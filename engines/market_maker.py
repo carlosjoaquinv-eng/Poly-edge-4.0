@@ -1103,11 +1103,11 @@ class MarketMakerEngine:
         # BID side: fills when sellers come down to our level
         bid_distance = abs(market_ask - pair.bid.price)
         if market_ask <= pair.bid.price:
-            fill_prob = 0.70  # Market crossed us — queue priority matters
+            fill_prob = 0.50  # Market crossed us — queue priority matters
         elif bid_distance <= 0.01:
-            fill_prob = 0.15  # Within 1¢
+            fill_prob = 0.08  # Within 1¢
         elif bid_distance <= 0.02:
-            fill_prob = 0.05  # Within 2¢
+            fill_prob = 0.02  # Within 2¢
         else:
             fill_prob = 0.0
         
@@ -1133,11 +1133,11 @@ class MarketMakerEngine:
         # ASK side: fills when buyers come up to our level
         ask_distance = abs(pair.ask.price - market_bid)
         if market_bid >= pair.ask.price:
-            fill_prob = 0.70  # Market crossed us
+            fill_prob = 0.50  # Market crossed us
         elif ask_distance <= 0.01:
-            fill_prob = 0.15  # Within 1¢
+            fill_prob = 0.08  # Within 1¢
         elif ask_distance <= 0.02:
-            fill_prob = 0.05  # Within 2¢
+            fill_prob = 0.02  # Within 2¢
         else:
             fill_prob = 0.0
         
