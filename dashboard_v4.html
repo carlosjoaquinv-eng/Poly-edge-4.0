@@ -281,7 +281,7 @@ body {
   gap: 8px;
   margin-bottom: 8px;
 }
-.inv-label { font-size: 11px; width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.inv-label { font-size: 11px; min-width: 180px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
 .inv-track {
   flex: 1;
   height: 20px;
@@ -764,12 +764,19 @@ function updateMM(mm) {
   }
   updateQuotes(quotesArr);
   
-  // Build token_id → question name lookup from quotes
+  // Build token_id → question name lookup from quotes AND token_names
   const tokenNames = {};
   if (mm.quotes && typeof mm.quotes === 'object') {
     Object.entries(mm.quotes).forEach(([tid, q]) => {
       if (q.question) tokenNames[tid] = q.question;
       if (q.url) tokenNames[tid + '_url'] = q.url;
+    });
+  }
+  // Also from token_names map (covers YES + NO tokens)
+  if (mm.token_names && typeof mm.token_names === 'object') {
+    Object.entries(mm.token_names).forEach(([tid, info]) => {
+      if (info.question && !tokenNames[tid]) tokenNames[tid] = info.question;
+      if (info.url && !tokenNames[tid + '_url']) tokenNames[tid + '_url'] = info.url;
     });
   }
   // Also from markets array

@@ -1268,11 +1268,11 @@ class MarketMakerEngine:
                     "ask": f"{p.ask.price:.3f}x{p.ask.size:.0f}" if p.ask else None,
                     "fair_value": round(p.fair_value, 4),
                     "question": next(
-                        (m.question for m in self._active_markets if m.token_id_yes == tid),
+                        (m.question for m in self._active_markets if m.token_id_yes == tid or m.token_id_no == tid),
                         tid[:16] + "..."
                     ),
                     "url": next(
-                        (m.url for m in self._active_markets if m.token_id_yes == tid),
+                        (m.url for m in self._active_markets if m.token_id_yes == tid or m.token_id_no == tid),
                         ""
                     ),
                 }
@@ -1282,6 +1282,10 @@ class MarketMakerEngine:
             "fill_count": self._fill_count,
             "spread_captured": round(self._total_spread_captured, 4),
             "kill_switch": self.inventory.check_kill_switch(),
+            "token_names": {
+                **{m.token_id_yes: {"question": m.question, "url": m.url} for m in self._active_markets},
+                **{m.token_id_no: {"question": m.question + " (NO)", "url": m.url} for m in self._active_markets},
+            },
             "inventory": self.inventory.get_stats(),
             "pnl": {
                 "realized": round(self.inventory.total_realized_pnl, 2),
