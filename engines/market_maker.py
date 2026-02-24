@@ -972,14 +972,15 @@ class MarketMakerEngine:
             except Exception as e:
                 continue
         
+        # Update persistent token name registry with ALL candidates (not just selected)
+        # This ensures inventory positions from rotated-out markets keep their names
+        for m in candidates:
+            self._token_name_registry[m.token_id_yes] = {"question": m.question, "url": m.url}
+            self._token_name_registry[m.token_id_no] = {"question": m.question + " (NO)", "url": m.url}
+
         # Select best markets
         selected = self.spread_analyzer.select_markets(candidates)
         self._active_markets = selected
-
-        # Update persistent token name registry with all seen markets
-        for m in selected:
-            self._token_name_registry[m.token_id_yes] = {"question": m.question, "url": m.url}
-            self._token_name_registry[m.token_id_no] = {"question": m.question + " (NO)", "url": m.url}
 
         logger.info(
             f"Market scan: {len(candidates)} candidates, "
