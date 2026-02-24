@@ -820,7 +820,11 @@ class MarketMakerEngine:
         self._paper_mode = True
         self._paper_fills: List[Dict] = []  # Simulated fills for paper mode
         self._force_kill = False  # Manual kill via /stop command
-        
+
+        # Persistent token name registry — survives market rotation
+        # Maps token_id → {"question": str, "url": str}
+        self._token_name_registry: Dict[str, Dict[str, str]] = {}
+
         # Stats
         self._started_at = 0.0
         self._quote_count = 0
@@ -971,7 +975,12 @@ class MarketMakerEngine:
         # Select best markets
         selected = self.spread_analyzer.select_markets(candidates)
         self._active_markets = selected
-        
+
+        # Update persistent token name registry with all seen markets
+        for m in selected:
+            self._token_name_registry[m.token_id_yes] = {"question": m.question, "url": m.url}
+            self._token_name_registry[m.token_id_no] = {"question": m.question + " (NO)", "url": m.url}
+
         logger.info(
             f"Market scan: {len(candidates)} candidates, "
             f"{len(selected)} selected for MM"
@@ -1283,6 +1292,7 @@ class MarketMakerEngine:
             "spread_captured": round(self._total_spread_captured, 4),
             "kill_switch": self.inventory.check_kill_switch(),
             "token_names": {
+                **self._token_name_registry,
                 **{m.token_id_yes: {"question": m.question, "url": m.url} for m in self._active_markets},
                 **{m.token_id_no: {"question": m.question + " (NO)", "url": m.url} for m in self._active_markets},
             },
@@ -1318,8 +1328,9 @@ class MarketMakerEngine:
             "total_spread_captured": self._total_spread_captured,
             "paper_fills": self._paper_fills[-200:],  # Keep last 200 fills
             "inventory": self.inventory.save_state(),
+            "token_name_registry": self._token_name_registry,
         }
-    
+
     def load_state(self, state: Dict):
         """Restore engine state from persistence."""
         if not state:
@@ -1329,6 +1340,7 @@ class MarketMakerEngine:
         self._fill_count = state.get("fill_count", 0)
         self._total_spread_captured = state.get("total_spread_captured", 0.0)
         self._paper_fills = state.get("paper_fills", [])
+        self._token_name_registry = state.get("token_name_registry", {})
         if "inventory" in state:
             self.inventory.load_state(state["inventory"])
         logger.info(
