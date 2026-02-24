@@ -759,6 +759,7 @@ function updateMM(mm) {
       spread: q.bid && q.ask ? parseFloat(q.ask.split('x')[0]) - parseFloat(q.bid.split('x')[0]) : null,
       fair_value: q.fair_value,
       market: q.question || tid.substring(0, 12) + '…',
+      url: q.url || '',
     }));
   }
   updateQuotes(quotesArr);
@@ -786,16 +787,20 @@ function updateQuotes(quotes) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No active quotes</td></tr>';
     return;
   }
-  tbody.innerHTML = quotes.map(q => `
+  tbody.innerHTML = quotes.map(q => {
+    const label = q.url
+      ? `<a href="${q.url}" target="_blank" style="color:var(--cyan);text-decoration:none" title="${q.market}">${q.market}</a>`
+      : (q.market || q.condition_id);
+    return `
     <tr>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${q.market || q.condition_id}">${q.market || fmtShort(q.condition_id, 30)}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${q.market || q.condition_id}">${label}</td>
       <td style="color:var(--green)">${fmtPrice(q.bid_price)}</td>
       <td style="color:var(--red)">${fmtPrice(q.ask_price)}</td>
       <td style="color:var(--amber)">${q.spread ? (q.spread * 100).toFixed(1) + '¢' : '—'}</td>
       <td>$${(q.bid_size || 0).toFixed(0)}</td>
       <td style="color:var(--cyan)">${fmtPrice(q.fair_value)}</td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 function updateInventory(positions, tokenNames) {
@@ -815,11 +820,11 @@ function updateInventory(positions, tokenNames) {
     const pct = Math.min(Math.abs(net) / maxPos * 50, 50);
     const isLong = net > 0;
     const label = url
-      ? `<a href="${url}" target="_blank" style="color:inherit;text-decoration:none" title="${name}">${fmtShort(name, 22)}</a>`
-      : `<span title="${name}">${fmtShort(name, 22)}</span>`;
+      ? `<a href="${url}" target="_blank" style="color:inherit;text-decoration:none" title="${name}">${name}</a>`
+      : `<span title="${name}">${name}</span>`;
     return `
       <div class="inv-row">
-        <span class="inv-label">${label}</span>
+        <span class="inv-label" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
         <div class="inv-track">
           <div class="inv-center"></div>
           ${isLong
