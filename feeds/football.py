@@ -138,6 +138,10 @@ class FootballFeed:
     
     async def _api_get(self, endpoint: str, params: Dict = None) -> Optional[Dict]:
         """Make API request with error handling."""
+        # Skip if rate limited
+        if hasattr(self, '_rate_limited_until') and time.time() < self._rate_limited_until:
+            return None
+        
         session = await self._get_session()
         url = f"{API_BASE}/{endpoint}"
         try:
@@ -146,11 +150,18 @@ class FootballFeed:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("errors"):
-                        logger.warning(f"API error: {data['errors']}")
+                        err = data['errors']
+                        if 'request limit' in str(err).lower() or 'requests' in err:
+                            # Rate limited — back off for 1 hour
+                            self._rate_limited_until = time.time() + 3600
+                            logger.warning(f"API rate limit reached — backing off 1 hour")
+                        else:
+                            logger.warning(f"API error: {err}")
                         return None
                     return data
                 elif resp.status == 429:
-                    logger.warning("API rate limit hit — backing off")
+                    self._rate_limited_until = time.time() + 3600
+                    logger.warning("API rate limit hit — backing off 1 hour")
                     return None
                 else:
                     logger.warning(f"API returned {resp.status}")

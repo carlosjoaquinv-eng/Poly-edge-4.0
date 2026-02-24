@@ -1068,7 +1068,7 @@ class SniperExecutor:
                 "status": t.status,
                 "market_question": t.signal.market_question[:80] if t.signal else "",
                 "direction": t.signal.direction if t.signal else "",
-                "edge": t.signal.edge_cents if t.signal else 0,
+                "edge": t.signal.gap_cents if t.signal else 0,
             }
         return {
             "active_trades": [_trade_to_dict(t) for t in self._active_trades],
