@@ -665,22 +665,122 @@ body::after {
 .panel:nth-child(8) { animation-delay: 0.4s; }
 
 /* ─── RESPONSIVE ─── */
+
+/* Tablet landscape / small desktop */
 @media (max-width: 1200px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
   .span-3 { grid-column: span 2; }
   .span-4 { grid-column: span 2; }
+  .header { padding: 0 20px; }
+  .header-right { gap: 20px; }
+  .header-stat-value { font-size: 15px; }
+  .inv-label { min-width: 140px; max-width: 160px; }
 }
-@media (max-width: 768px) {
-  .grid { grid-template-columns: 1fr; }
-  .span-2, .span-3, .span-4 { grid-column: span 1; }
+
+/* Tablet portrait */
+@media (max-width: 960px) {
   .header {
     flex-direction: column;
     height: auto;
-    padding: 12px 16px;
-    gap: 10px;
+    padding: 14px 16px;
+    gap: 12px;
+    align-items: stretch;
   }
-  .header-right { gap: 16px; }
-  .panel-body { padding: 12px 14px; }
+  .header-left {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-right {
+    justify-content: center;
+    gap: 24px;
+  }
+  .header-stat { text-align: center; }
+  .header-divider { display: none; }
+
+  .dtable { font-size: 11px; }
+  .dtable th { font-size: 8px; letter-spacing: 0.5px; }
+  .dtable td { padding: 6px 2px; }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+    background: var(--ob-void);
+  }
+  .span-2, .span-3, .span-4 { grid-column: span 1; }
+
+  /* Add spacing between stacked panels */
+  .panel { margin-bottom: 2px; }
+
+  .panel-body { padding: 14px 14px; }
+  .panel-header { padding: 10px 14px; min-height: 38px; }
+  .panel-title { font-size: 10px; letter-spacing: 1.5px; }
+
+  /* Metrics become more compact */
+  .metric { padding: 10px 12px; }
+  .metric-value { font-size: 17px; }
+  .metric-label { font-size: 8px; letter-spacing: 1px; }
+
+  /* Inventory bars — reduce label width */
+  .inv-label { min-width: 120px; max-width: 140px; font-size: 10px; }
+  .inv-track { height: 18px; }
+  .inv-value { font-size: 10px; width: 45px; }
+  .inv-row { gap: 6px; margin-bottom: 8px; }
+
+  /* Quotes table — horizontal scroll on small screens */
+  .panel:has(#quote-table) .panel-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dtable { min-width: 500px; }
+  .dtable td { white-space: nowrap; font-size: 11px; }
+
+  /* Signal rows */
+  .signal-row { padding: 8px 10px; gap: 8px; }
+  .signal-market { font-size: 10px; }
+  .signal-detail { font-size: 9px; }
+  .signal-badge { font-size: 8px; padding: 2px 6px; }
+
+  /* Log entries */
+  .log-entry { font-size: 10px; gap: 6px; }
+  .log-time { width: 40px; font-size: 9px; }
+  .log-type { width: 60px; font-size: 9px; }
+
+  /* PnL bars */
+  .pnl-bar-label { font-size: 9px; width: 36px; }
+  .pnl-bar-value { font-size: 10px; width: 55px; }
+  .pnl-bar-track { height: 16px; }
+
+  /* Meta cards */
+  .meta-card { padding: 10px 12px; }
+  .meta-card-title { font-size: 8px; }
+  .meta-card-text { font-size: 11px; }
+  .adj-row { padding: 6px 8px; font-size: 10px; }
+}
+
+/* Small mobile (iPhone SE, etc.) */
+@media (max-width: 420px) {
+  .header-left { gap: 8px; }
+  .logo { font-size: 17px; }
+  .logo-version { font-size: 9px; padding: 1px 5px; }
+  .mode-badge { padding: 3px 8px; font-size: 9px; letter-spacing: 1.5px; }
+  .uptime-cluster { font-size: 10px; }
+
+  .header-right { gap: 16px; flex-wrap: wrap; }
+  .header-stat-label { font-size: 8px; }
+  .header-stat-value { font-size: 14px; }
+
+  .metrics { gap: 4px; }
+  .metrics-3 { grid-template-columns: repeat(3, 1fr); }
+  .metric { padding: 8px 8px; }
+  .metric-value { font-size: 15px; }
+
+  .inv-label { min-width: 100px; max-width: 120px; font-size: 9px; }
+
+  .panel-body { padding: 10px 10px; }
 }
 </style>
 </head>
