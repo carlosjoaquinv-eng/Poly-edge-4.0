@@ -151,17 +151,18 @@ class FootballFeed:
                     data = await resp.json()
                     if data.get("errors"):
                         err = data['errors']
-                        if 'request limit' in str(err).lower() or 'requests' in err:
-                            # Rate limited — back off for 1 hour
-                            self._rate_limited_until = time.time() + 3600
-                            logger.warning(f"API rate limit reached — backing off 1 hour")
+                        err_str = str(err).lower()
+                        if 'ratelimit' in err_str or 'rate limit' in err_str or 'too many' in err_str or 'requests' in err_str:
+                            # Rate limited — disable feed until restart or Pro upgrade
+                            self._rate_limited_until = float('inf')
+                            logger.warning(f"API rate limit reached — football feed DISABLED (free tier exhausted). Upgrade to Pro for continued use.")
                         else:
                             logger.warning(f"API error: {err}")
                         return None
                     return data
                 elif resp.status == 429:
-                    self._rate_limited_until = time.time() + 3600
-                    logger.warning("API rate limit hit — backing off 1 hour")
+                    self._rate_limited_until = float('inf')
+                    logger.warning("API rate limit hit — football feed DISABLED")
                     return None
                 else:
                     logger.warning(f"API returned {resp.status}")
