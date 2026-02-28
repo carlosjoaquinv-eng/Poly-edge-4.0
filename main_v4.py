@@ -87,9 +87,17 @@ class CLOBClient:
         self.config = config
         self._v4_client = None
         self._session = None
+        self._ws_feed = None  # OrderbookWSFeed instance for real-time data
         self.api_url = config.CLOB_API_URL
         self.gamma_url = config.GAMMA_API_URL
         self.logger = logging.getLogger("polyedge.clob")
+
+    def set_ws_feed(self, ws_feed):
+        """Attach WS orderbook feed for real-time data."""
+        self._ws_feed = ws_feed
+        # Also attach to v4 client if available
+        if self._v4_client and hasattr(self._v4_client, 'set_ws_feed'):
+            self._v4_client.set_ws_feed(ws_feed)
     
     async def connect(self):
         try:
@@ -132,6 +140,15 @@ class CLOBClient:
             return []
     
     async def get_orderbook(self, token_id: str):
+        # Try WS cache first (real-time, no network call)
+        if self._ws_feed:
+            ob = self._ws_feed.get_orderbook(token_id)
+            if ob:
+                return ob
+            # Auto-subscribe on miss so future calls hit WS
+            self._ws_feed.subscribe([token_id])
+
+        # Fall back to REST
         if self._v4_client:
             return await self._v4_client.get_orderbook(token_id)
         try:
@@ -204,10 +221,15 @@ class TelegramNotifier:
         self._engines = {}  # Set after init: {"mm": ..., "sniper": ..., "meta": ...}
         self._config = config
         self._start_time = time.time()
-    
+        self._ws_feed = None  # Set via set_ws_feed()
+
     def set_engines(self, mm, sniper, meta):
         """Called after engines are created so commands can access them."""
         self._engines = {"mm": mm, "sniper": sniper, "meta": meta}
+
+    def set_ws_feed(self, ws_feed):
+        """Set WS feed reference for /feeds command."""
+        self._ws_feed = ws_feed
     
     async def send(self, message: str):
         if not self.enabled:
@@ -496,9 +518,17 @@ class TelegramNotifier:
         await self.send(msg)
     
     async def _cmd_feeds(self):
+        ws_status = "❌"
+        if self._ws_feed:
+            stats = self._ws_feed.get_stats()
+            if stats.get("connected"):
+                ws_status = f"✅ {stats.get('subscribed', 0)} tokens, {stats.get('book_updates', 0)} updates"
+            else:
+                ws_status = f"🔄 reconnecting ({stats.get('reconnects', 0)} attempts)"
         msg = (
             f"<b>📡 Feed Status</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
+            f"📖 Orderbook WS: {ws_status}\n"
             f"⚽ Football: {'✅' if self._config.FOOTBALL_API_KEY else '❌'}\n"
             f"₿ Crypto: ✅ {', '.join(self._config.CRYPTO_SYMBOLS)}\n"
             f"📊 Dashboard: :{self._config.DASHBOARD_PORT}\n"
@@ -798,12 +828,14 @@ class DashboardAPI:
       GET /api/config    → current config summary
     """
     
-    def __init__(self, config: Config, mm: MarketMakerEngine, 
-                  sniper: ResolutionSniperV2, meta: MetaStrategist):
+    def __init__(self, config: Config, mm: MarketMakerEngine,
+                  sniper: ResolutionSniperV2, meta: MetaStrategist,
+                  orderbook_ws=None):
         self.config = config
         self.mm = mm
         self.sniper = sniper
         self.meta = meta
+        self.orderbook_ws = orderbook_ws
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
     
@@ -851,6 +883,7 @@ class DashboardAPI:
                 "sniper": self.sniper.get_stats() if self.sniper else {},
                 "meta": self.meta.get_stats() if self.meta else {},
             },
+            "orderbook_ws": self.orderbook_ws.get_stats() if self.orderbook_ws else {},
         }
         return web.json_response(status)
     
@@ -899,6 +932,7 @@ class PolyEdgeV4:
         self.clob: Optional[CLOBClient] = None
         self.telegram: Optional[TelegramNotifier] = None
         self.store: Optional[DataStore] = None
+        self.orderbook_ws = None  # OrderbookWSFeed for real-time orderbook data
         
         # Engines
         self.mm: Optional[MarketMakerEngine] = None
@@ -926,7 +960,16 @@ class PolyEdgeV4:
         # Initialize shared services
         self.clob = CLOBClient(self.config)
         await self.clob.connect()
-        
+
+        # Initialize real-time orderbook WebSocket feed
+        from feeds.orderbook_ws import OrderbookWSFeed
+        self.orderbook_ws = OrderbookWSFeed(
+            ws_url=self.config.CLOB_WS_URL,
+            rest_url=self.config.CLOB_API_URL,
+        )
+        self.clob.set_ws_feed(self.orderbook_ws)
+        await self.orderbook_ws.start()
+
         self.telegram = TelegramNotifier(self.config)
         self.store = DataStore(self.config)
         
@@ -954,10 +997,12 @@ class PolyEdgeV4:
         self.feeds = FeedBridge(self.config, self.sniper)
         
         # Dashboard
-        self.dashboard = DashboardAPI(self.config, self.mm, self.sniper, self.meta)
+        self.dashboard = DashboardAPI(self.config, self.mm, self.sniper, self.meta,
+                                       orderbook_ws=self.orderbook_ws)
         
-        # Wire telegram commands to engines
+        # Wire telegram commands to engines + WS feed
         self.telegram.set_engines(self.mm, self.sniper, self.meta)
+        self.telegram.set_ws_feed(self.orderbook_ws)
         
         # Wire live configs to meta-strategist for prompt building
         self.meta.set_configs(self.config.mm, self.config.sniper)
@@ -1052,6 +1097,8 @@ class PolyEdgeV4:
             await self.meta.stop()
         if self.feeds:
             await self.feeds.stop()
+        if self.orderbook_ws:
+            await self.orderbook_ws.close()
         if self.clob:
             await self.clob.disconnect()
         
