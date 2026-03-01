@@ -12,8 +12,11 @@ No auth required for market data.
 
 Message types handled:
   - book: Full orderbook snapshot (bids/asks) — sent on subscribe + after trades
-  - price_change: Best bid/ask updates on order placement/cancellation
-  - (future: last_trade_price, best_bid_ask)
+  - price_change: Incremental level updates on order placement/cancellation.
+    Each change specifies asset_id, price, size, side (BUY/SELL).
+    Merged into cached orderbook: upsert if size>0, remove if size==0.
+  - last_trade_price: Last trade price per asset (tracked for reference)
+  - tick_size_change: Tick size updates (when price > 0.96 or < 0.04)
 
 Usage:
     feed = OrderbookWSFeed(ws_url, rest_url)
@@ -69,9 +72,17 @@ class OrderbookWSFeed:
         # Cache: token_id -> (timestamp, orderbook_dict)
         self._cache: Dict[str, tuple] = {}
 
+        # Last trade prices: token_id -> (timestamp, price)
+        self._last_trade: Dict[str, tuple] = {}
+
+        # Tick sizes: token_id -> tick_size (str)
+        self._tick_sizes: Dict[str, str] = {}
+
         # Stats
         self._msg_count = 0
         self._book_count = 0
+        self._price_change_count = 0
+        self._level_merges = 0
         self._reconnect_count = 0
         self._last_msg_time = 0.0
 
@@ -167,6 +178,16 @@ class OrderbookWSFeed:
     def is_connected(self) -> bool:
         return self._connected
 
+    def get_last_trade(self, token_id: str) -> Optional[float]:
+        """Get last trade price for a token, or None."""
+        entry = self._last_trade.get(token_id)
+        if not entry:
+            return None
+        ts, price = entry
+        if time.time() - ts > self.STALE_THRESHOLD:
+            return None
+        return price
+
     def get_stats(self) -> Dict:
         return {
             "connected": self._connected,
@@ -174,6 +195,8 @@ class OrderbookWSFeed:
             "cached": len(self._cache),
             "messages_total": self._msg_count,
             "book_updates": self._book_count,
+            "price_changes": self._price_change_count,
+            "level_merges": self._level_merges,
             "reconnects": self._reconnect_count,
             "last_msg_age_s": round(time.time() - self._last_msg_time, 1) if self._last_msg_time else None,
         }
@@ -319,7 +342,11 @@ class OrderbookWSFeed:
             self._handle_book(data)
         elif event_type == "price_change":
             self._handle_price_change(data)
-        # Future: last_trade_price, best_bid_ask, tick_size_change
+        elif event_type == "last_trade_price":
+            self._handle_last_trade(data)
+        elif event_type == "tick_size_change":
+            self._handle_tick_size_change(data)
+        # best_bid_ask events are redundant when we have price_change merge
 
     def _handle_book(self, data: Dict):
         """Process full orderbook snapshot."""
@@ -338,19 +365,90 @@ class OrderbookWSFeed:
 
     def _handle_price_change(self, data: Dict):
         """
-        Process price change event — update best bid/ask in cache.
+        Process price_change event — merge updated levels into cached orderbook.
 
-        price_change events fire on order placement/cancellation and include
-        updated price levels. We merge them into the existing cached orderbook
-        to keep it fresh between full book snapshots.
+        price_change events fire on order placement/cancellation. Each contains
+        a `price_changes` array where each entry specifies:
+          - asset_id, price, size, side (BUY/SELL), best_bid, best_ask
+
+        Merge logic:
+          - BUY side → upsert/remove bid level
+          - SELL side → upsert/remove ask level
+          - size == "0" → remove the level entirely
+          - Keeps bids sorted descending, asks ascending by price
         """
-        asset_id = data.get("asset_id", "")
-        if not asset_id:
+        changes = data.get("price_changes", [])
+        if not changes:
             return
 
-        # If we have a cached book, update its timestamp to keep it fresh
-        # The price_change confirms the market is active
-        cached = self._cache.get(asset_id)
-        if cached:
+        self._price_change_count += 1
+        now = time.time()
+
+        for change in changes:
+            asset_id = change.get("asset_id", "")
+            if not asset_id:
+                continue
+
+            cached = self._cache.get(asset_id)
+            if not cached:
+                continue  # No book to update — wait for full snapshot
+
             _, ob = cached
-            self._cache[asset_id] = (time.time(), ob)
+            price_str = change.get("price", "")
+            size_str = change.get("size", "0")
+            side = change.get("side", "")
+
+            if not price_str or not side:
+                continue
+
+            if side == "BUY":
+                ob["bids"] = self._merge_level(ob.get("bids", []), price_str, size_str, descending=True)
+            elif side == "SELL":
+                ob["asks"] = self._merge_level(ob.get("asks", []), price_str, size_str, descending=False)
+
+            self._cache[asset_id] = (now, ob)
+            self._level_merges += 1
+
+    @staticmethod
+    def _merge_level(levels: List[Dict], price: str, size: str, descending: bool) -> List[Dict]:
+        """
+        Merge a single price level into an existing list of levels.
+
+        - size > 0: insert or update the level at this price
+        - size == 0: remove the level at this price
+        - Keeps sorted: descending for bids, ascending for asks
+        """
+        price_f = float(price)
+        size_f = float(size)
+
+        # Remove existing level at this price (compare as float for "0.5" vs ".50")
+        new_levels = [l for l in levels if abs(float(l.get("price", 0)) - price_f) > 1e-10]
+
+        # Add updated level if size > 0
+        if size_f > 0:
+            new_levels.append({"price": price, "size": size})
+
+        # Sort: bids descending, asks ascending
+        new_levels.sort(key=lambda l: float(l.get("price", 0)), reverse=descending)
+
+        return new_levels
+
+    def _handle_last_trade(self, data: Dict):
+        """Track last trade price per asset."""
+        asset_id = data.get("asset_id", "")
+        price_str = data.get("price", "")
+        if asset_id and price_str:
+            try:
+                self._last_trade[asset_id] = (time.time(), float(price_str))
+            except (ValueError, TypeError):
+                pass
+
+    def _handle_tick_size_change(self, data: Dict):
+        """Track tick size changes (occurs when price > 0.96 or < 0.04)."""
+        asset_id = data.get("asset_id", "")
+        tick_size = data.get("tick_size", "")
+        if asset_id and tick_size:
+            old = self._tick_sizes.get(asset_id)
+            self._tick_sizes[asset_id] = tick_size
+            if old and old != tick_size:
+                logger.info(f"Tick size change: {asset_id[:12]}... {old} → {tick_size}")

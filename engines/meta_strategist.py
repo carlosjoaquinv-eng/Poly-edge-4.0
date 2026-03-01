@@ -93,6 +93,18 @@ class MetaReport:
     cost_usd: float = 0.0
 
 
+@dataclass
+class AdjustmentOutcome:
+    """Tracks whether a past adjustment helped or hurt performance."""
+    run_timestamp: float
+    pnl_at_adjustment: float
+    adjustments: List[Dict] = field(default_factory=list)
+    pnl_at_review: float = 0.0
+    pnl_delta: float = 0.0
+    outcome: str = "pending"   # "good", "bad", "neutral", "rolled_back", "pending"
+    reviewed: bool = False
+
+
 # ─────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────
@@ -120,7 +132,13 @@ class MetaConfig:
     
     # Auto-apply
     auto_apply_adjustments: bool = False    # Require human approval by default
-    auto_apply_confidence_threshold: float = 80.0  # Auto-apply only if confidence > 80%
+    auto_apply_confidence_threshold: float = 80.0  # Legacy: kept for reference
+    auto_apply_min_confidence: float = 60.0  # Below this: reject entirely
+
+    # Auto-rollback
+    auto_rollback_enabled: bool = True
+    auto_rollback_loss_usd: float = 25.0     # Rollback if PnL drops > $25
+    auto_rollback_loss_pct: float = 5.0      # Or drops > 5% of bankroll
 
 
 # ─────────────────────────────────────────────
@@ -333,30 +351,93 @@ class LLMClient:
 class ParameterAdjuster:
     """
     Applies parameter adjustments with safety rails.
-    
-    The LLM suggests changes, but this class enforces limits:
-      - No change > X% from current value
-      - Minimum trade count before adjusting
-      - Changes are logged for audit trail
+
+    Pipeline: scale by confidence → clamp to bounds → validate % change → apply.
     """
-    
+
+    # Absolute min/max bounds per parameter — prevents drift to nonsensical values
+    PARAM_BOUNDS: Dict[str, tuple] = {
+        # MM params
+        "kelly_fraction": (0.05, 0.5),
+        "target_half_spread": (0.005, 0.05),
+        "max_position_per_market": (10.0, 200.0),
+        "max_total_inventory": (50.0, 500.0),
+        "min_quote_size": (5.0, 50.0),
+        "max_quote_size": (10.0, 100.0),
+        "min_spread_cents": (0.1, 5.0),
+        "max_spread_cents": (2.0, 20.0),
+        "inventory_skew_factor": (0.1, 1.0),
+        "max_loss_per_day": (10.0, 200.0),
+        # Sniper params
+        "min_gap_cents": (1.0, 10.0),
+        "min_edge_pct": (1.0, 15.0),
+        "max_trade_size": (10.0, 200.0),
+        "max_total_exposure": (50.0, 500.0),
+        "min_confidence": (30.0, 90.0),
+        "max_concurrent_trades": (1, 12),
+        "max_loss_per_trade": (5.0, 100.0),
+    }
+
     def __init__(self, config: MetaConfig):
         self.config = config
         self._adjustment_history: List[Dict] = []
-    
-    def validate_adjustment(self, adj: ParameterAdjustment, 
+
+    def scale_adjustment(self, adj: ParameterAdjustment,
+                          min_conf: float) -> ParameterAdjustment:
+        """
+        Scale adjustment magnitude by confidence.
+
+        Formula: scale = (confidence - min_conf) / (100 - min_conf)
+                 effective = current + (recommended - current) * scale
+
+        conf=min_conf → 0% of change, conf=100 → 100% of change.
+        """
+        if not isinstance(adj.current_value, (int, float)) or \
+           not isinstance(adj.new_value, (int, float)):
+            return adj  # Non-numeric: can't scale
+
+        conf = max(min_conf, min(adj.confidence, 100.0))
+        scale = (conf - min_conf) / max(100.0 - min_conf, 1.0)
+        effective = adj.current_value + (adj.new_value - adj.current_value) * scale
+
+        if isinstance(adj.current_value, int):
+            effective = round(effective)
+        else:
+            effective = round(effective, 6)
+
+        return ParameterAdjustment(
+            engine=adj.engine, parameter=adj.parameter,
+            current_value=adj.current_value, new_value=effective,
+            reason=adj.reason, confidence=adj.confidence,
+            impact_estimate=adj.impact_estimate,
+        )
+
+    def clamp_to_bounds(self, adj: ParameterAdjustment) -> ParameterAdjustment:
+        """Clamp new_value to hard bounds if defined for this parameter."""
+        bounds = self.PARAM_BOUNDS.get(adj.parameter)
+        if bounds and isinstance(adj.new_value, (int, float)):
+            lo, hi = bounds
+            clamped = max(lo, min(adj.new_value, hi))
+            if clamped != adj.new_value:
+                logger.info(f"Clamped {adj.parameter}: {adj.new_value} → {clamped} (bounds [{lo}, {hi}])")
+                return ParameterAdjustment(
+                    engine=adj.engine, parameter=adj.parameter,
+                    current_value=adj.current_value, new_value=clamped,
+                    reason=adj.reason, confidence=adj.confidence,
+                    impact_estimate=adj.impact_estimate,
+                )
+        return adj
+
+    def validate_adjustment(self, adj: ParameterAdjustment,
                              current_config: Dict) -> Tuple[bool, str]:
         """Validate a proposed adjustment against safety rails."""
-        # Check minimum trade count
-        # (caller should verify this before calling)
-        
         # Check change magnitude
         if isinstance(adj.current_value, (int, float)) and isinstance(adj.new_value, (int, float)):
             if adj.current_value != 0:
                 change_pct = abs(adj.new_value - adj.current_value) / abs(adj.current_value) * 100
             else:
                 change_pct = 100 if adj.new_value != 0 else 0
-            
+
             # Apply appropriate limit based on parameter type
             if "spread" in adj.parameter or "half_spread" in adj.parameter:
                 limit = self.config.max_spread_change_pct
@@ -365,11 +446,18 @@ class ParameterAdjuster:
             elif "exposure" in adj.parameter or "max_position" in adj.parameter:
                 limit = self.config.max_exposure_change_pct
             else:
-                limit = 30.0  # Default limit
-            
+                limit = 30.0
+
             if change_pct > limit:
                 return False, f"Change too large: {change_pct:.0f}% > {limit:.0f}% limit"
-        
+
+            # Check hard bounds
+            bounds = self.PARAM_BOUNDS.get(adj.parameter)
+            if bounds:
+                lo, hi = bounds
+                if adj.new_value < lo or adj.new_value > hi:
+                    return False, f"Out of bounds: {adj.new_value} not in [{lo}, {hi}]"
+
         return True, "OK"
     
     def apply_adjustment(self, adj: ParameterAdjustment, 
@@ -473,6 +561,11 @@ Rules:
         self._run_count = 0
         self._mm_config = None      # Set via set_configs()
         self._sniper_config = None   # Set via set_configs()
+
+        # Outcome tracking
+        self._pending_outcomes: List[AdjustmentOutcome] = []
+        self._completed_outcomes: List[AdjustmentOutcome] = []
+        self._last_adj_statuses: List[Dict] = []  # For Telegram report
     
     def set_configs(self, mm_config=None, sniper_config=None):
         """Store live config references for prompt building."""
@@ -525,62 +618,227 @@ Rules:
                             mm_config=None, sniper_config=None) -> Optional[MetaReport]:
         """
         Run a single analysis cycle.
-        
+
         Can be called manually (for testing) or by the loop.
         If stats aren't provided, uses last snapshot data.
+        Uses self._mm_config / self._sniper_config for auto-apply (set via set_configs).
         """
         self._run_count += 1
         logger.info(f"Meta Strategist run #{self._run_count}")
-        
+
         try:
-            # Take snapshot
             mm_s = mm_stats or {}
             sniper_s = sniper_stats or {}
             snapshot = self.analyzer.take_snapshot(mm_s, sniper_s)
-            
-            # Compute period metrics
+
+            # Review outcomes from previous adjustments
+            await self._review_outcomes(snapshot)
+
             period = self.analyzer.compute_period_metrics(self.config.run_interval_hours)
-            
-            # Build prompt for LLM
             user_prompt = self._build_prompt(snapshot, period)
-            
-            # Call LLM
             response_text, cost = await self.llm.analyze(self.SYSTEM_PROMPT, user_prompt)
         except Exception as e:
             logger.error(f"Meta run #{self._run_count} failed during data/LLM phase: {e}", exc_info=True)
             return None
-        
-        # Parse response (separate try — LLM may return garbage)
+
         try:
             report = self._parse_response(response_text, snapshot, cost)
         except Exception as e:
             logger.error(f"Meta run #{self._run_count} failed parsing LLM response: {e}")
             return None
-        
+
         if report:
             self._reports.append(report)
-            
-            # Apply adjustments if auto-apply is enabled
-            if self.config.auto_apply_adjustments and mm_config and sniper_config:
+
+            # Resolve live configs: prefer method args (manual/test), fall back to stored refs
+            live_mm = mm_config or self._mm_config
+            live_sniper = sniper_config or self._sniper_config
+
+            # Auto-apply pipeline: reject → scale → clamp → validate → apply
+            self._last_adj_statuses = []
+            if self.config.auto_apply_adjustments and live_mm and live_sniper:
+                applied = []
                 for adj in report.adjustments:
-                    if adj.confidence >= self.config.auto_apply_confidence_threshold:
-                        valid, reason = self.adjuster.validate_adjustment(adj, {})
-                        if valid:
-                            self.adjuster.apply_adjustment(adj, mm_config, sniper_config)
-                        else:
-                            logger.info(f"Adjustment rejected: {reason}")
-            
-            # Send Telegram report
+                    status = self._apply_single_adjustment(adj, live_mm, live_sniper)
+                    self._last_adj_statuses.append(status)
+                    if status["status"] in ("applied", "partial"):
+                        applied.append(status["scaled_adj"])
+
+                if applied:
+                    self._record_adjustment_snapshot(snapshot, applied)
+            else:
+                # Auto-apply off — mark all as recommended-only
+                for adj in report.adjustments:
+                    self._last_adj_statuses.append({"adj": adj, "status": "recommend"})
+
             if self.telegram:
                 await self._send_report(report)
-            
+
             logger.info(
                 f"Meta run #{self._run_count} complete: "
                 f"{len(report.adjustments)} adjustments, cost=${cost:.4f}"
             )
-        
+
         return report
-    
+
+    def _apply_single_adjustment(self, adj: ParameterAdjustment,
+                                  mm_config, sniper_config) -> Dict:
+        """Run one adjustment through the confidence-weighted pipeline."""
+        min_conf = self.config.auto_apply_min_confidence
+
+        # Reject if below minimum confidence
+        if adj.confidence < min_conf:
+            logger.info(f"Rejected {adj.engine}.{adj.parameter} (conf {adj.confidence:.0f} < {min_conf})")
+            return {"adj": adj, "status": "rejected_confidence",
+                    "reason": f"conf {adj.confidence:.0f} < {min_conf}"}
+
+        # Scale by confidence
+        scaled = self.adjuster.scale_adjustment(adj, min_conf)
+
+        # Skip no-ops (confidence exactly at threshold → scale=0)
+        if isinstance(scaled.new_value, (int, float)) and isinstance(scaled.current_value, (int, float)):
+            if abs(scaled.new_value - scaled.current_value) < 1e-9:
+                return {"adj": adj, "status": "rejected_noop", "reason": "no effective change"}
+
+        # Clamp to hard bounds
+        scaled = self.adjuster.clamp_to_bounds(scaled)
+
+        # Validate % change limits
+        valid, reason = self.adjuster.validate_adjustment(scaled, {})
+        if not valid:
+            logger.info(f"Rejected {adj.engine}.{adj.parameter}: {reason}")
+            return {"adj": adj, "status": "rejected_validation", "reason": reason}
+
+        # Apply
+        self.adjuster.apply_adjustment(scaled, mm_config, sniper_config)
+
+        # Determine if partial or full
+        is_partial = adj.confidence < 80
+        status = "partial" if is_partial else "applied"
+
+        return {"adj": adj, "status": status, "scaled_adj": scaled,
+                "scaled_value": scaled.new_value}
+
+    # ── Outcome Tracking ──
+
+    def _record_adjustment_snapshot(self, snapshot: PerformanceSnapshot,
+                                     applied: List[ParameterAdjustment]):
+        """Record PnL and adjustments at the time of application."""
+        outcome = AdjustmentOutcome(
+            run_timestamp=time.time(),
+            pnl_at_adjustment=snapshot.total_pnl,
+            adjustments=[
+                {"engine": a.engine, "parameter": a.parameter,
+                 "old_value": a.current_value, "new_value": a.new_value,
+                 "confidence": a.confidence}
+                for a in applied
+            ],
+        )
+        self._pending_outcomes.append(outcome)
+        # Keep only last 20 pending
+        if len(self._pending_outcomes) > 20:
+            self._pending_outcomes = self._pending_outcomes[-20:]
+        logger.info(f"Recorded adjustment snapshot: PnL=${snapshot.total_pnl:.2f}, {len(applied)} adjustments")
+
+    async def _review_outcomes(self, snapshot: PerformanceSnapshot):
+        """
+        Review pending outcomes from previous adjustments.
+
+        Called at the start of each run. Compares current PnL to PnL at
+        adjustment time after 6h+ elapsed. Marks good/bad/neutral.
+        Also triggers auto-rollback if enabled and loss exceeds thresholds.
+        """
+        now = time.time()
+        min_elapsed = 6 * 3600  # Wait at least 6 hours before judging
+
+        still_pending = []
+        for outcome in self._pending_outcomes:
+            if outcome.reviewed:
+                continue
+
+            elapsed = now - outcome.run_timestamp
+            if elapsed < min_elapsed:
+                still_pending.append(outcome)
+                continue
+
+            # Enough time has passed — evaluate
+            outcome.pnl_at_review = snapshot.total_pnl
+            outcome.pnl_delta = snapshot.total_pnl - outcome.pnl_at_adjustment
+            outcome.reviewed = True
+
+            if outcome.pnl_delta > 1.0:
+                outcome.outcome = "good"
+            elif outcome.pnl_delta < -1.0:
+                outcome.outcome = "bad"
+            else:
+                outcome.outcome = "neutral"
+
+            self._completed_outcomes.append(outcome)
+            logger.info(
+                f"Outcome review: PnL delta=${outcome.pnl_delta:+.2f} → {outcome.outcome} "
+                f"(adj from {datetime.fromtimestamp(outcome.run_timestamp, timezone.utc).strftime('%m-%d %H:%M')})"
+            )
+
+            # Auto-rollback check
+            if outcome.outcome == "bad" and self.config.auto_rollback_enabled:
+                await self._check_and_rollback(outcome, snapshot)
+
+        self._pending_outcomes = still_pending
+        # Keep only last 50 completed outcomes
+        if len(self._completed_outcomes) > 50:
+            self._completed_outcomes = self._completed_outcomes[-50:]
+
+    async def _check_and_rollback(self, outcome: AdjustmentOutcome,
+                                    snapshot: PerformanceSnapshot):
+        """
+        Auto-rollback if PnL dropped significantly after adjustments.
+
+        Triggers if loss exceeds auto_rollback_loss_usd OR auto_rollback_loss_pct
+        of bankroll. Restores pre-adjustment values via setattr().
+        """
+        loss = abs(outcome.pnl_delta)
+        loss_pct = (loss / max(snapshot.bankroll, 1)) * 100
+
+        should_rollback = (
+            loss >= self.config.auto_rollback_loss_usd or
+            loss_pct >= self.config.auto_rollback_loss_pct
+        )
+
+        if not should_rollback:
+            return
+
+        logger.warning(
+            f"Auto-rollback triggered: PnL delta=${outcome.pnl_delta:+.2f} "
+            f"(loss ${loss:.2f} / {loss_pct:.1f}% of bankroll)"
+        )
+
+        rolled_back = []
+        for adj_info in outcome.adjustments:
+            engine = adj_info.get("engine", "")
+            param = adj_info.get("parameter", "")
+            old_val = adj_info.get("old_value")
+
+            target = self._mm_config if engine == "mm" else self._sniper_config
+            if target and hasattr(target, param) and old_val is not None:
+                current = getattr(target, param)
+                setattr(target, param, old_val)
+                rolled_back.append(f"{engine}.{param}: {current} → {old_val}")
+                logger.info(f"Rolled back {engine}.{param}: {current} → {old_val}")
+
+        outcome.outcome = "rolled_back"
+
+        if rolled_back and self.telegram:
+            msg = (
+                f"🔄 Auto-Rollback Triggered\n"
+                f"{'─' * 28}\n"
+                f"PnL delta: ${outcome.pnl_delta:+.2f} "
+                f"(${loss:.2f} loss / {loss_pct:.1f}% of bankroll)\n\n"
+                f"Restored parameters:\n"
+            )
+            for rb in rolled_back:
+                msg += f"  • {rb}\n"
+            await self.telegram.send(msg)
+
     def _build_prompt(self, snapshot: PerformanceSnapshot, period: Dict) -> str:
         """Build the analysis prompt with current data."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -629,7 +887,25 @@ Rules:
 - max_total_exposure: {self._sniper_config.max_total_exposure if self._sniper_config else 300.0}
 - kelly_fraction: {self._sniper_config.kelly_fraction if self._sniper_config else 0.3}
 
-Provide your analysis and recommended parameter adjustments as JSON."""
+"""
+
+        # Add outcome history if we have any
+        if self._completed_outcomes:
+            recent = self._completed_outcomes[-5:]
+            prompt += "\n## Past Adjustment Outcomes\n"
+            prompt += "These are outcomes of previous adjustments — use them to calibrate confidence.\n"
+            for o in recent:
+                ts = datetime.fromtimestamp(o.run_timestamp, timezone.utc).strftime("%m-%d %H:%M")
+                prompt += (
+                    f"- [{ts}] {o.outcome.upper()}: PnL delta=${o.pnl_delta:+.2f} "
+                    f"({len(o.adjustments)} params adjusted)\n"
+                )
+            good = sum(1 for o in self._completed_outcomes if o.outcome == "good")
+            bad = sum(1 for o in self._completed_outcomes if o.outcome == "bad")
+            rolled = sum(1 for o in self._completed_outcomes if o.outcome == "rolled_back")
+            prompt += f"Overall record: {good} good, {bad} bad, {rolled} rolled back\n"
+
+        prompt += "\nProvide your analysis and recommended parameter adjustments as JSON."
 
         return prompt
     
@@ -707,12 +983,25 @@ Provide your analysis and recommended parameter adjustments as JSON."""
             f"⚠️ {report.risk_assessment}\n"
         )
         
-        if report.adjustments:
-            msg += f"\n🔧 Adjustments ({len(report.adjustments)}):\n"
+        if self._last_adj_statuses:
+            msg += f"\n🔧 Adjustments ({len(self._last_adj_statuses)}):\n"
+            for s in self._last_adj_statuses:
+                adj = s["adj"]
+                status = s["status"]
+                icon = {"applied": "✅", "partial": "⚠️", "recommend": "📋",
+                        "rejected_confidence": "❌", "rejected_validation": "❌",
+                        "rejected_noop": "❌"}.get(status, "❓")
+                scaled_val = s.get("scaled_value", adj.new_value)
+                msg += f"  {icon} {adj.engine}.{adj.parameter}: {adj.current_value}→{scaled_val}"
+                if status == "partial":
+                    msg += f" (scaled, conf={adj.confidence:.0f})"
+                elif status.startswith("rejected"):
+                    msg += f" ({s.get('reason', status)})"
+                msg += f"\n     {adj.reason}\n"
+        elif report.adjustments:
+            msg += f"\n📋 Recommendations ({len(report.adjustments)}):\n"
             for adj in report.adjustments:
-                applied = "✅" if self.config.auto_apply_adjustments and \
-                    adj.confidence >= self.config.auto_apply_confidence_threshold else "📋"
-                msg += f"  {applied} {adj.engine}.{adj.parameter}: {adj.current_value}→{adj.new_value}\n"
+                msg += f"  📋 {adj.engine}.{adj.parameter}: {adj.current_value}→{adj.new_value}\n"
                 msg += f"     {adj.reason}\n"
         
         if report.recommendations:

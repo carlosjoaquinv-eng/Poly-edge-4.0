@@ -131,6 +131,14 @@ class Config:
             self.meta.run_interval_hours = float(os.environ["META_INTERVAL_HOURS"])
         if os.environ.get("META_AUTO_APPLY"):
             self.meta.auto_apply_adjustments = os.environ["META_AUTO_APPLY"].lower() in ("true", "1")
+        if os.environ.get("META_MIN_CONFIDENCE"):
+            self.meta.auto_apply_min_confidence = float(os.environ["META_MIN_CONFIDENCE"])
+        if os.environ.get("META_ROLLBACK_LOSS"):
+            self.meta.auto_rollback_loss_usd = float(os.environ["META_ROLLBACK_LOSS"])
+        if os.environ.get("META_ROLLBACK_ENABLED"):
+            self.meta.auto_rollback_enabled = os.environ["META_ROLLBACK_ENABLED"].lower() in ("true", "1")
+        if os.environ.get("META_ROLLBACK_LOSS_PCT"):
+            self.meta.auto_rollback_loss_pct = float(os.environ["META_ROLLBACK_LOSS_PCT"])
     
     def validate(self) -> list:
         """Validate config and return list of warnings."""
