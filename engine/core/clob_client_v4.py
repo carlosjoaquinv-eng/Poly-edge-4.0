@@ -220,11 +220,18 @@ class CLOBClientV4:
         # Rate limiter
         self._limiter = RateLimiter(config.max_requests_per_second)
         
+        # WebSocket feed (optional, set via set_ws_feed)
+        self._ws_feed = None
+
         # Stats
         self._request_count = 0
         self._error_count = 0
         self._orders_placed = 0
         self._orders_cancelled = 0
+
+    def set_ws_feed(self, ws_feed):
+        """Attach WS orderbook feed for real-time data."""
+        self._ws_feed = ws_feed
     
     # ── Connection ──
     
@@ -343,7 +350,14 @@ class CLOBClientV4:
             return cached  # Return stale cache on error
     
     async def get_orderbook(self, token_id: str) -> Optional[Dict]:
-        """Fetch orderbook for a token with caching."""
+        """Fetch orderbook for a token. Checks WS cache first, then REST."""
+        # Check WS cache first (real-time, no network call)
+        if self._ws_feed:
+            ob = self._ws_feed.get_orderbook(token_id)
+            if ob:
+                return ob
+
+        # Fall back to REST with caching
         now = time.time()
         cached = self._orderbook_cache.get(token_id)
         if cached and now - cached[0] < self.config.orderbook_cache_ttl:
