@@ -820,7 +820,8 @@ class MarketMakerEngine:
         self._paper_mode = True
         self._paper_fills: List[Dict] = []  # Simulated fills for paper mode
         self._force_kill = False  # Manual kill via /stop command
-        
+        self._kill_alerted = False  # One-shot flag for kill-switch Telegram alert
+
         # Stats
         self._started_at = 0.0
         self._quote_count = 0
@@ -986,9 +987,22 @@ class MarketMakerEngine:
         while self._running:
             try:
                 if self._force_kill or self.inventory.check_kill_switch():
-                    logger.warning("KILL SWITCH ACTIVE — trading paused")
+                    if not self._kill_alerted:
+                        self._kill_alerted = True
+                        reason = "manual /kill" if self._force_kill else f"daily loss ${self.inventory.daily_pnl:.2f}"
+                        logger.warning(f"KILL SWITCH ACTIVE — {reason}")
+                        await self.telegram.send(
+                            f"🚨 <b>MM KILL SWITCH TRIGGERED</b>\n"
+                            f"Reason: {reason}\n"
+                            f"Daily PnL: ${self.inventory.daily_pnl:.2f}\n"
+                            f"Limit: -${self.config.max_loss_per_day}\n"
+                            f"All quoting halted. /resume to restart."
+                        )
                     await asyncio.sleep(60)
                     continue
+                elif self._kill_alerted:
+                    # Kill condition cleared (e.g. daily reset) — reset flag
+                    self._kill_alerted = False
                 
                 for market in self._active_markets:
                     await self._update_quotes(market)

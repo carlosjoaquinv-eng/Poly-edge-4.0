@@ -86,6 +86,14 @@ class OrderbookWSFeed:
         self._reconnect_count = 0
         self._last_msg_time = 0.0
 
+        # Alert callback: called with (event_type, stats_dict)
+        # event_type: "disconnect" or "reconnect"
+        self._alert_callback = None
+
+    def set_alert_callback(self, callback):
+        """Set async callback for disconnect/reconnect alerts."""
+        self._alert_callback = callback
+
     # ── Public API ──────────────────────────────────────────
 
     async def start(self):
@@ -221,6 +229,12 @@ class OrderbookWSFeed:
                 ) as ws:
                     self._ws = ws
                     self._connected = True
+                    # Fire reconnect alert if this is a reconnection (not first connect)
+                    if consecutive_failures > 0 and self._alert_callback:
+                        try:
+                            await self._alert_callback("reconnect", self.get_stats())
+                        except Exception:
+                            pass
                     consecutive_failures = 0
                     logger.info("Orderbook WS connected")
 
@@ -255,6 +269,13 @@ class OrderbookWSFeed:
 
             if not self._started:
                 return
+
+            # Fire disconnect alert (once per disconnect event)
+            if self._alert_callback and consecutive_failures <= 1:
+                try:
+                    await self._alert_callback("disconnect", self.get_stats())
+                except Exception:
+                    pass
 
             # Reconnect with exponential backoff
             self._reconnect_count += 1

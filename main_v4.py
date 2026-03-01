@@ -24,6 +24,7 @@ import os
 import time
 import json
 import logging
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
@@ -235,6 +236,11 @@ class TelegramNotifier:
         self._config = config
         self._start_time = time.time()
         self._ws_feed = None  # Set via set_ws_feed()
+        self._store = None    # Set via set_store()
+
+    def set_store(self, store):
+        """Called after DataStore is created so /history can access it."""
+        self._store = store
 
     def set_engines(self, mm, sniper, meta):
         """Called after engines are created so commands can access them."""
@@ -336,6 +342,7 @@ class TelegramNotifier:
             "/kill": self._cmd_kill,
             "/stop": self._cmd_stop,
             "/resume": self._cmd_resume,
+            "/history": self._cmd_history,
             "/help": self._cmd_help,
             "/start": self._cmd_help,
         }
@@ -615,6 +622,40 @@ class TelegramNotifier:
             f"Trading active again."
         )
     
+    async def _cmd_history(self):
+        """Show 24h PnL history summary."""
+        if not self._store:
+            await self.send("❌ DataStore not available")
+            return
+
+        # Load last 288 entries (24h at 5-min intervals)
+        entries = self._store.load_log("pnl_history", last_n=288)
+        if not entries:
+            await self.send("📊 No PnL history yet (first snapshot after 5 min)")
+            return
+
+        def total_pnl(e):
+            return e.get("mm_realized", 0) + e.get("mm_unrealized", 0) + e.get("sniper_pnl", 0)
+
+        pnls = [total_pnl(e) for e in entries]
+        start_pnl = pnls[0]
+        current_pnl = pnls[-1]
+        delta = current_pnl - start_pnl
+        peak = max(pnls)
+        trough = min(pnls)
+        delta_sign = "+" if delta >= 0 else ""
+
+        await self.send(
+            f"📊 <b>PnL History ({len(entries)} snapshots)</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"Start:   ${start_pnl:.2f}\n"
+            f"Current: ${current_pnl:.2f}\n"
+            f"Delta:   {delta_sign}${delta:.2f}\n"
+            f"Peak:    ${peak:.2f}\n"
+            f"Trough:  ${trough:.2f}\n"
+            f"Entries: {len(entries)}"
+        )
+
     async def _cmd_help(self):
         msg = (
             f"<b>⚡ PolyEdge v{self._config.VERSION}</b>\n"
@@ -626,6 +667,7 @@ class TelegramNotifier:
             f"/quotes — 📝 Active quotes\n"
             f"/positions — 📋 Sniper positions\n"
             f"/pnl — 💰 P&L summary\n"
+            f"/history — 📈 24h PnL history\n"
             f"/feeds — 📡 Feed status\n"
             f"/kill — 🛑 Toggle MM kill switch\n"
             f"/stop — ⏹ STOP all engines\n"
@@ -662,6 +704,29 @@ class DataStore:
         except Exception as e:
             self.logger.error(f"Load error ({key}): {e}")
         return None
+
+    def append_log(self, key: str, entry: dict):
+        """Append a timestamped entry to a JSONL log file."""
+        path = os.path.join(self.data_dir, f"{key}.jsonl")
+        try:
+            entry["_ts"] = datetime.now(timezone.utc).isoformat()
+            with open(path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception as e:
+            self.logger.error(f"Append log error ({key}): {e}")
+
+    def load_log(self, key: str, last_n: int = 100) -> list:
+        """Load last N entries from a JSONL log file."""
+        path = os.path.join(self.data_dir, f"{key}.jsonl")
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path) as f:
+                lines = f.readlines()
+            return [json.loads(line) for line in lines[-last_n:]]
+        except Exception as e:
+            self.logger.error(f"Load log error ({key}): {e}")
+            return []
 
 
 # ─────────────────────────────────────────────
@@ -843,13 +908,14 @@ class DashboardAPI:
     
     def __init__(self, config: Config, mm: MarketMakerEngine,
                   sniper: ResolutionSniperV2, meta: MetaStrategist,
-                  orderbook_ws=None, clob=None):
+                  orderbook_ws=None, clob=None, store=None):
         self.config = config
         self.mm = mm
         self.sniper = sniper
         self.meta = meta
         self.orderbook_ws = orderbook_ws
         self.clob = clob
+        self.store = store
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
     
@@ -865,6 +931,7 @@ class DashboardAPI:
         app.router.add_get("/api/sniper", self._handle_sniper)
         app.router.add_get("/api/meta", self._handle_meta)
         app.router.add_get("/api/config", self._handle_config)
+        app.router.add_get("/api/history", self._handle_history)
         app.router.add_get("/health", self._handle_health)
         
         # Serve dashboard HTML at root
@@ -924,6 +991,12 @@ class DashboardAPI:
         from aiohttp import web
         return web.json_response({"status": "ok", "version": self.config.VERSION})
 
+    async def _handle_history(self, request):
+        from aiohttp import web
+        n = int(request.query.get("n", "288"))  # Default: 24h of 5-min snapshots
+        entries = self.store.load_log("pnl_history", last_n=n) if self.store else []
+        return web.json_response(entries)
+
 
 # ─────────────────────────────────────────────
 # Main Orchestrator
@@ -958,9 +1031,12 @@ class PolyEdgeV4:
         
         # Feed bridge
         self.feeds: Optional[FeedBridge] = None
-        
+
         # Dashboard
         self.dashboard: Optional[DashboardAPI] = None
+
+        # Engine health alert flags (one-shot per engine)
+        self._engine_stop_alerted = {"MM": False, "Sniper": False, "Meta": False}
     
     async def start(self):
         """Initialize and start everything."""
@@ -989,7 +1065,8 @@ class PolyEdgeV4:
 
         self.telegram = TelegramNotifier(self.config)
         self.store = DataStore(self.config)
-        
+        self.telegram.set_store(self.store)
+
         # Initialize engines
         self.mm = MarketMakerEngine(
             config=self.config.mm,
@@ -1015,12 +1092,30 @@ class PolyEdgeV4:
         
         # Dashboard
         self.dashboard = DashboardAPI(self.config, self.mm, self.sniper, self.meta,
-                                       orderbook_ws=self.orderbook_ws, clob=self.clob)
+                                       orderbook_ws=self.orderbook_ws, clob=self.clob,
+                                       store=self.store)
         
         # Wire telegram commands to engines + WS feed
         self.telegram.set_engines(self.mm, self.sniper, self.meta)
         self.telegram.set_ws_feed(self.orderbook_ws)
-        
+
+        # Wire WS disconnect/reconnect alerts to Telegram
+        async def _ws_alert(event_type, stats):
+            if event_type == "disconnect":
+                await self.telegram.send(
+                    f"⚠️ <b>Orderbook WS disconnected</b>\n"
+                    f"Subscribed tokens: {stats.get('subscribed', 0)}\n"
+                    f"Reconnects so far: {stats.get('reconnects', 0)}\n"
+                    f"Falling back to REST polling."
+                )
+            elif event_type == "reconnect":
+                await self.telegram.send(
+                    f"✅ <b>Orderbook WS reconnected</b>\n"
+                    f"Subscribed tokens: {stats.get('subscribed', 0)}\n"
+                    f"Real-time feed restored."
+                )
+        self.orderbook_ws.set_alert_callback(_ws_alert)
+
         # Wire live configs to meta-strategist for prompt building
         self.meta.set_configs(self.config.mm, self.config.sniper)
         
@@ -1081,13 +1176,31 @@ class PolyEdgeV4:
                 self.store.save("mm_stats", mm_stats)
                 self.store.save("sniper_stats", sniper_stats)
                 self.store.save("meta_stats", self.meta.get_stats() if self.meta else {})
+
+                # Append PnL snapshot to history log (JSONL)
+                self.store.append_log("pnl_history", {
+                    "mm_realized": mm_stats.get("pnl", {}).get("realized", 0),
+                    "mm_unrealized": mm_stats.get("pnl", {}).get("unrealized", 0),
+                    "sniper_pnl": sniper_stats.get("executor", {}).get("total_pnl", 0),
+                    "mm_exposure": mm_stats.get("inventory", {}).get("total_exposure", 0),
+                    "sniper_exposure": sniper_stats.get("executor", {}).get("total_exposure", 0),
+                })
                 
                 # Persist full engine state (survives restarts)
                 if self.mm:
                     self.store.save("mm_state", self.mm.save_state())
                 if self.sniper:
                     self.store.save("sniper_state", self.sniper.save_state())
-                
+
+                # Engine health check — alert if stopped unexpectedly
+                for name, engine in [("MM", self.mm), ("Sniper", self.sniper), ("Meta", self.meta)]:
+                    if engine and hasattr(engine, '_running') and not engine._running:
+                        if not self._engine_stop_alerted.get(name):
+                            self._engine_stop_alerted[name] = True
+                            await self.telegram.send(f"⚠️ <b>{name} engine stopped unexpectedly</b>")
+                    elif engine and hasattr(engine, '_running') and engine._running:
+                        self._engine_stop_alerted[name] = False
+
             except Exception as e:
                 self.logger.error(f"Stats loop error: {e}")
     
