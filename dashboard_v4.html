@@ -415,6 +415,39 @@ body {
           <div class="metric-value" id="sys-clob">—</div>
         </div>
       </div>
+      <!-- WS Feed Health -->
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Orderbook Feed</div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">WS Status</div>
+            <div class="metric-value" id="ws-status">
+              <span class="status-dot" id="ws-dot" style="margin-right:4px"></span>
+              <span id="ws-status-text">—</span>
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Subscribed</div>
+            <div class="metric-value" id="ws-subscribed">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">WS Hit Rate</div>
+            <div class="metric-value" id="ws-hit-rate">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Last Msg</div>
+            <div class="metric-value" id="ws-last-msg">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Reconnects</div>
+            <div class="metric-value" id="ws-reconnects">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Book Updates</div>
+            <div class="metric-value" id="ws-book-updates">0</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -935,6 +968,57 @@ function updateEventLog(sn) {
   }).join('');
 }
 
+function updateFeeds(data) {
+  if (!data) return;
+  const feeds = data.feeds || data.orderbook_ws || {};
+
+  // WS connected status
+  const dot = document.getElementById('ws-dot');
+  const statusText = document.getElementById('ws-status-text');
+  if (feeds.connected) {
+    dot.className = 'status-dot dot-green';
+    statusText.textContent = 'connected';
+    statusText.style.color = 'var(--green)';
+  } else {
+    dot.className = 'status-dot dot-red';
+    statusText.textContent = 'disconnected';
+    statusText.style.color = 'var(--red)';
+  }
+
+  // Subscribed count
+  document.getElementById('ws-subscribed').textContent = feeds.subscribed || 0;
+
+  // WS hit rate
+  const hitRate = feeds.ws_hit_rate;
+  const hitEl = document.getElementById('ws-hit-rate');
+  if (hitRate != null) {
+    hitEl.textContent = hitRate.toFixed(1) + '%';
+    hitEl.style.color = hitRate >= 80 ? 'var(--green)' : hitRate >= 50 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    hitEl.textContent = '—';
+    hitEl.style.color = 'var(--text-1)';
+  }
+
+  // Last message age
+  const age = feeds.last_msg_age_s;
+  const ageEl = document.getElementById('ws-last-msg');
+  if (age != null) {
+    ageEl.textContent = age < 60 ? age.toFixed(0) + 's' : fmtTime(age);
+    ageEl.style.color = age <= 30 ? 'var(--green)' : age <= 60 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    ageEl.textContent = '—';
+    ageEl.style.color = 'var(--text-2)';
+  }
+
+  // Reconnects
+  const reconEl = document.getElementById('ws-reconnects');
+  reconEl.textContent = feeds.reconnects || 0;
+  reconEl.style.color = (feeds.reconnects || 0) > 5 ? 'var(--amber)' : 'var(--text-0)';
+
+  // Book updates
+  document.getElementById('ws-book-updates').textContent = feeds.book_updates || 0;
+}
+
 function updateMeta(meta) {
   if (!meta) return;
   document.getElementById('meta-runs').textContent = meta.run_count || 0;
@@ -989,6 +1073,7 @@ async function refresh() {
 
   updateHeader(statusData);
   updateSystem(statusData);
+  updateFeeds(statusData);
   updateMM(mmData);
   updateSniper(sniperData);
   updateGapRadar(sniperData);

@@ -88,6 +88,8 @@ class CLOBClient:
         self._v4_client = None
         self._session = None
         self._ws_feed = None  # OrderbookWSFeed instance for real-time data
+        self._ws_hits = 0
+        self._rest_fallbacks = 0
         self.api_url = config.CLOB_API_URL
         self.gamma_url = config.GAMMA_API_URL
         self.logger = logging.getLogger("polyedge.clob")
@@ -144,11 +146,13 @@ class CLOBClient:
         if self._ws_feed:
             ob = self._ws_feed.get_orderbook(token_id)
             if ob:
+                self._ws_hits += 1
                 return ob
             # Auto-subscribe on miss so future calls hit WS
             self._ws_feed.subscribe([token_id])
 
         # Fall back to REST
+        self._rest_fallbacks += 1
         if self._v4_client:
             return await self._v4_client.get_orderbook(token_id)
         try:
@@ -159,6 +163,15 @@ class CLOBClient:
         except Exception as e:
             self.logger.error(f"get_orderbook error: {e}")
             return None
+
+    def get_feed_stats(self) -> dict:
+        """Return WS hit rate and fallback counters."""
+        total = self._ws_hits + self._rest_fallbacks
+        return {
+            "ws_hits": self._ws_hits,
+            "rest_fallbacks": self._rest_fallbacks,
+            "ws_hit_rate": round(self._ws_hits / total * 100, 1) if total > 0 else 0.0,
+        }
     
     async def get_price(self, token_id: str):
         if self._v4_client:
@@ -830,12 +843,13 @@ class DashboardAPI:
     
     def __init__(self, config: Config, mm: MarketMakerEngine,
                   sniper: ResolutionSniperV2, meta: MetaStrategist,
-                  orderbook_ws=None):
+                  orderbook_ws=None, clob=None):
         self.config = config
         self.mm = mm
         self.sniper = sniper
         self.meta = meta
         self.orderbook_ws = orderbook_ws
+        self.clob = clob
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
     
@@ -874,6 +888,8 @@ class DashboardAPI:
     async def _handle_status(self, request):
         from aiohttp import web
         uptime = time.time() - self._started_at
+        ws_stats = self.orderbook_ws.get_stats() if self.orderbook_ws else {}
+        clob_stats = self.clob.get_feed_stats() if self.clob and hasattr(self.clob, 'get_feed_stats') else {}
         status = {
             "version": self.config.VERSION,
             "mode": "PAPER" if self.config.PAPER_MODE else "LIVE",
@@ -883,7 +899,8 @@ class DashboardAPI:
                 "sniper": self.sniper.get_stats() if self.sniper else {},
                 "meta": self.meta.get_stats() if self.meta else {},
             },
-            "orderbook_ws": self.orderbook_ws.get_stats() if self.orderbook_ws else {},
+            "orderbook_ws": ws_stats,
+            "feeds": {**ws_stats, **clob_stats},
         }
         return web.json_response(status)
     
@@ -998,7 +1015,7 @@ class PolyEdgeV4:
         
         # Dashboard
         self.dashboard = DashboardAPI(self.config, self.mm, self.sniper, self.meta,
-                                       orderbook_ws=self.orderbook_ws)
+                                       orderbook_ws=self.orderbook_ws, clob=self.clob)
         
         # Wire telegram commands to engines + WS feed
         self.telegram.set_engines(self.mm, self.sniper, self.meta)
