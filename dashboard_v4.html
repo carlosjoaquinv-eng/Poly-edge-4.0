@@ -338,6 +338,159 @@ body {
   font-style: italic;
 }
 
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 10px 18px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+.tab-btn:hover { color: var(--text-0); }
+.tab-btn.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Trades Tab ── */
+.trades-container { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+.trades-section { margin-bottom: 24px; }
+.trades-section-title {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-2);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.trades-table { width: 100%; border-collapse: collapse; }
+.trades-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.trades-table th:hover { color: var(--cyan); }
+.trades-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(42,45,62,0.4);
+  font-size: 12px;
+}
+.trades-table tr:hover td { background: rgba(0,229,255,0.02); }
+
+/* ── PnL Tab ── */
+.pnl-container { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+.chart-wrapper {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.chart-title {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+.chart-range {
+  display: flex;
+  gap: 4px;
+}
+.range-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.range-btn:hover { color: var(--text-0); border-color: var(--border-active); }
+.range-btn.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0,229,255,0.08); }
+#pnl-canvas { width: 100%; height: 300px; display: block; }
+.pnl-legend {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  padding-top: 10px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ── Config Tab ── */
+.config-container { padding: 16px 20px; max-width: 1000px; margin: 0 auto; }
+.config-section {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.config-section-header {
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+}
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(42,45,62,0.4);
+}
+.config-row:last-child { border-bottom: none; }
+.config-key { font-size: 12px; color: var(--text-2); }
+.config-val { font-size: 12px; font-weight: 500; color: var(--text-0); }
+
 /* ── Responsive ── */
 @media (max-width: 1200px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
@@ -348,6 +501,9 @@ body {
   .grid { grid-template-columns: 1fr; }
   .span-2, .span-3, .span-4 { grid-column: span 1; }
   .header { flex-direction: column; gap: 8px; }
+  .tab-bar { overflow-x: auto; }
+  .tab-btn { white-space: nowrap; padding: 8px 12px; font-size: 11px; }
+  .trades-container, .pnl-container, .config-container { padding: 12px; }
 }
 </style>
 </head>
@@ -379,7 +535,16 @@ body {
   </div>
 </div>
 
-<!-- Dashboard Grid -->
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="trades">Trades</button>
+  <button class="tab-btn" data-tab="pnl">PnL</button>
+  <button class="tab-btn" data-tab="config">Config</button>
+</div>
+
+<!-- Tab: Dashboard (default) -->
+<div class="tab-content active" id="tab-dashboard">
 <div class="grid">
 
   <!-- Panel 1: System Status -->
@@ -413,6 +578,39 @@ body {
         <div class="metric">
           <div class="metric-label">CLOB</div>
           <div class="metric-value" id="sys-clob">—</div>
+        </div>
+      </div>
+      <!-- WS Feed Health -->
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Orderbook Feed</div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">WS Status</div>
+            <div class="metric-value" id="ws-status">
+              <span class="status-dot" id="ws-dot" style="margin-right:4px"></span>
+              <span id="ws-status-text">—</span>
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Subscribed</div>
+            <div class="metric-value" id="ws-subscribed">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">WS Hit Rate</div>
+            <div class="metric-value" id="ws-hit-rate">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Last Msg</div>
+            <div class="metric-value" id="ws-last-msg">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Reconnects</div>
+            <div class="metric-value" id="ws-reconnects">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Book Updates</div>
+            <div class="metric-value" id="ws-book-updates">0</div>
+          </div>
         </div>
       </div>
     </div>
@@ -569,6 +767,124 @@ body {
     </div>
   </div>
 
+</div><!-- /.grid -->
+</div><!-- /#tab-dashboard -->
+
+<!-- Tab: Trades -->
+<div class="tab-content" id="tab-trades">
+  <div class="trades-container">
+    <!-- Summary Metrics -->
+    <div class="metrics" style="margin-bottom:20px">
+      <div class="metric">
+        <div class="metric-label">Total Trades</div>
+        <div class="metric-value" id="trades-total">0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Win Rate</div>
+        <div class="metric-value" id="trades-winrate">0%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total PnL</div>
+        <div class="metric-value stat-neutral" id="trades-pnl">$0.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg PnL</div>
+        <div class="metric-value stat-neutral" id="trades-avg">$0.00</div>
+      </div>
+    </div>
+
+    <!-- Active Positions -->
+    <div class="trades-section">
+      <div class="trades-section-title">Active Positions</div>
+      <table class="trades-table">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Direction</th>
+            <th>Size</th>
+            <th>Entry</th>
+            <th>Edge</th>
+            <th>Age</th>
+          </tr>
+        </thead>
+        <tbody id="trades-active-tbody">
+          <tr><td colspan="6" class="empty-state">No active positions</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Completed Trades -->
+    <div class="trades-section">
+      <div class="trades-section-title">Completed Trades <span id="trades-completed-count" style="color:var(--text-2);font-weight:400">(0)</span></div>
+      <table class="trades-table">
+        <thead>
+          <tr>
+            <th data-sort="market">Market</th>
+            <th data-sort="direction">Dir</th>
+            <th data-sort="size">Size</th>
+            <th data-sort="entry_price">Entry</th>
+            <th data-sort="fill_price">Fill</th>
+            <th data-sort="pnl">PnL</th>
+            <th data-sort="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="trades-completed-tbody">
+          <tr><td colspan="7" class="empty-state">No completed trades</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: PnL -->
+<div class="tab-content" id="tab-pnl">
+  <div class="pnl-container">
+    <!-- Summary Stats -->
+    <div class="metrics" style="margin-bottom:16px">
+      <div class="metric">
+        <div class="metric-label">Start PnL</div>
+        <div class="metric-value stat-neutral" id="pnl-start">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Current PnL</div>
+        <div class="metric-value stat-neutral" id="pnl-current">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Delta</div>
+        <div class="metric-value stat-neutral" id="pnl-delta">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Peak / Trough</div>
+        <div class="metric-value" id="pnl-peak-trough">—</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-wrapper">
+      <div class="chart-header">
+        <div class="chart-title">PnL Over Time</div>
+        <div class="chart-range">
+          <button class="range-btn" data-range="12">1h</button>
+          <button class="range-btn" data-range="72">6h</button>
+          <button class="range-btn active" data-range="288">24h</button>
+          <button class="range-btn" data-range="0">All</button>
+        </div>
+      </div>
+      <canvas id="pnl-canvas"></canvas>
+      <div class="pnl-legend">
+        <span><span class="legend-dot" style="background:var(--green)"></span>MM Realized</span>
+        <span><span class="legend-dot" style="background:var(--cyan)"></span>Sniper PnL</span>
+        <span><span class="legend-dot" style="background:var(--text-0)"></span>Total</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Config -->
+<div class="tab-content" id="tab-config">
+  <div class="config-container" id="config-content">
+    <div class="empty-state" style="padding:40px">Loading config...</div>
+  </div>
 </div>
 
 <script>
@@ -935,6 +1251,57 @@ function updateEventLog(sn) {
   }).join('');
 }
 
+function updateFeeds(data) {
+  if (!data) return;
+  const feeds = data.feeds || data.orderbook_ws || {};
+
+  // WS connected status
+  const dot = document.getElementById('ws-dot');
+  const statusText = document.getElementById('ws-status-text');
+  if (feeds.connected) {
+    dot.className = 'status-dot dot-green';
+    statusText.textContent = 'connected';
+    statusText.style.color = 'var(--green)';
+  } else {
+    dot.className = 'status-dot dot-red';
+    statusText.textContent = 'disconnected';
+    statusText.style.color = 'var(--red)';
+  }
+
+  // Subscribed count
+  document.getElementById('ws-subscribed').textContent = feeds.subscribed || 0;
+
+  // WS hit rate
+  const hitRate = feeds.ws_hit_rate;
+  const hitEl = document.getElementById('ws-hit-rate');
+  if (hitRate != null) {
+    hitEl.textContent = hitRate.toFixed(1) + '%';
+    hitEl.style.color = hitRate >= 80 ? 'var(--green)' : hitRate >= 50 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    hitEl.textContent = '—';
+    hitEl.style.color = 'var(--text-1)';
+  }
+
+  // Last message age
+  const age = feeds.last_msg_age_s;
+  const ageEl = document.getElementById('ws-last-msg');
+  if (age != null) {
+    ageEl.textContent = age < 60 ? age.toFixed(0) + 's' : fmtTime(age);
+    ageEl.style.color = age <= 30 ? 'var(--green)' : age <= 60 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    ageEl.textContent = '—';
+    ageEl.style.color = 'var(--text-2)';
+  }
+
+  // Reconnects
+  const reconEl = document.getElementById('ws-reconnects');
+  reconEl.textContent = feeds.reconnects || 0;
+  reconEl.style.color = (feeds.reconnects || 0) > 5 ? 'var(--amber)' : 'var(--text-0)';
+
+  // Book updates
+  document.getElementById('ws-book-updates').textContent = feeds.book_updates || 0;
+}
+
 function updateMeta(meta) {
   if (!meta) return;
   document.getElementById('meta-runs').textContent = meta.run_count || 0;
@@ -973,27 +1340,388 @@ function updateMeta(meta) {
   }
 }
 
+// ─────────────────────────────────────────────
+// Tab Navigation
+// ─────────────────────────────────────────────
+
+let activeTab = 'dashboard';
+let tradesSortField = 'pnl';
+let tradesSortAsc = false;
+let pnlRange = 288;
+let pnlData = null;
+let configLoaded = false;
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    if (tab === activeTab) return;
+
+    // Update buttons
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Update content
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+
+    activeTab = tab;
+
+    // Trigger initial load for data-heavy tabs
+    if (tab === 'trades') refreshTrades();
+    if (tab === 'pnl') refreshPnl();
+    if (tab === 'config' && !configLoaded) refreshConfig();
+  });
+});
+
+// Range buttons
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pnlRange = parseInt(btn.dataset.range);
+    refreshPnl();
+  });
+});
+
+// Sort headers for completed trades
+document.querySelectorAll('.trades-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.dataset.sort;
+    if (tradesSortField === field) {
+      tradesSortAsc = !tradesSortAsc;
+    } else {
+      tradesSortField = field;
+      tradesSortAsc = false;
+    }
+    renderCompletedTrades(state.trades?.completed || []);
+  });
+});
+
+// ─────────────────────────────────────────────
+// Trades Tab
+// ─────────────────────────────────────────────
+
+async function refreshTrades() {
+  const data = await fetchJSON('/api/trades');
+  if (!data) return;
+  state.trades = data;
+
+  // Summary
+  const s = data.summary || {};
+  document.getElementById('trades-total').textContent = s.total_trades || 0;
+  const wr = document.getElementById('trades-winrate');
+  wr.textContent = fmtPct(s.win_rate || 0);
+  wr.className = 'metric-value ' + ((s.win_rate || 0) >= 50 ? 'stat-positive' : 'stat-neutral');
+
+  const pEl = document.getElementById('trades-pnl');
+  pEl.textContent = fmt$(s.total_pnl);
+  pEl.className = 'metric-value ' + pnlClass(s.total_pnl || 0);
+
+  const aEl = document.getElementById('trades-avg');
+  aEl.textContent = fmt$(s.avg_pnl);
+  aEl.className = 'metric-value ' + pnlClass(s.avg_pnl || 0);
+
+  // Active positions
+  const activeTbody = document.getElementById('trades-active-tbody');
+  const active = data.active || [];
+  if (active.length === 0) {
+    activeTbody.innerHTML = '<tr><td colspan="6" class="empty-state">No active positions</td></tr>';
+  } else {
+    activeTbody.innerHTML = active.map(p => `
+      <tr>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtShort(p.market, 50)}</td>
+        <td style="color:${p.direction === 'BUY' ? 'var(--green)' : 'var(--red)'}">${p.direction}</td>
+        <td>$${(p.size || 0).toFixed(0)}</td>
+        <td>${fmtPrice(p.entry)}</td>
+        <td>${(p.edge || 0).toFixed(1)}%</td>
+        <td style="color:var(--text-2)">${(p.age_s || 0).toFixed(0)}s</td>
+      </tr>
+    `).join('');
+  }
+
+  // Completed trades
+  renderCompletedTrades(data.completed || []);
+}
+
+function renderCompletedTrades(trades) {
+  const tbody = document.getElementById('trades-completed-tbody');
+  document.getElementById('trades-completed-count').textContent = `(${trades.length})`;
+
+  if (trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No completed trades</td></tr>';
+    return;
+  }
+
+  // Sort
+  const sorted = [...trades].sort((a, b) => {
+    let va = a[tradesSortField], vb = b[tradesSortField];
+    if (tradesSortField === 'market' || tradesSortField === 'market_question') {
+      va = (a.market_question || '').toLowerCase();
+      vb = (b.market_question || '').toLowerCase();
+    }
+    if (typeof va === 'string') return tradesSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return tradesSortAsc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+  });
+
+  tbody.innerHTML = sorted.map(t => {
+    const pnl = t.pnl || 0;
+    return `
+      <tr>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.market_question || ''}">${fmtShort(t.market_question, 50)}</td>
+        <td style="color:${t.direction === 'BUY' ? 'var(--green)' : 'var(--red)'}">${t.direction || '—'}</td>
+        <td>$${(t.size || 0).toFixed(0)}</td>
+        <td>${fmtPrice(t.entry_price)}</td>
+        <td>${fmtPrice(t.fill_price)}</td>
+        <td style="color:${pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text-1)'};font-weight:600">${fmt$(pnl)}</td>
+        <td style="color:var(--text-2)">${t.status || '—'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+// PnL Chart Tab
+// ─────────────────────────────────────────────
+
+async function refreshPnl() {
+  const n = pnlRange || 9999;
+  const data = await fetchJSON(`/api/history?n=${n}`);
+  if (!data || data.length === 0) {
+    document.getElementById('pnl-start').textContent = '—';
+    document.getElementById('pnl-current').textContent = '—';
+    document.getElementById('pnl-delta').textContent = '—';
+    document.getElementById('pnl-peak-trough').textContent = '—';
+    return;
+  }
+  pnlData = data;
+
+  // Summary stats
+  const totals = data.map(d => (d.mm_realized || 0) + (d.mm_unrealized || 0) + (d.sniper_pnl || 0));
+  const first = totals[0];
+  const last = totals[totals.length - 1];
+  const delta = last - first;
+  const peak = Math.max(...totals);
+  const trough = Math.min(...totals);
+
+  const startEl = document.getElementById('pnl-start');
+  startEl.textContent = fmt$(first);
+  startEl.className = 'metric-value ' + pnlClass(first);
+
+  const curEl = document.getElementById('pnl-current');
+  curEl.textContent = fmt$(last);
+  curEl.className = 'metric-value ' + pnlClass(last);
+
+  const deltaEl = document.getElementById('pnl-delta');
+  deltaEl.textContent = (delta >= 0 ? '+' : '') + fmt$(delta);
+  deltaEl.className = 'metric-value ' + pnlClass(delta);
+
+  const ptEl = document.getElementById('pnl-peak-trough');
+  ptEl.innerHTML = `<span style="color:var(--green)">${fmt$(peak)}</span> / <span style="color:var(--red)">${fmt$(trough)}</span>`;
+
+  // Draw chart
+  drawPnlChart(data);
+}
+
+function drawPnlChart(data) {
+  const canvas = document.getElementById('pnl-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const W = rect.width;
+  const H = rect.height;
+  const pad = { top: 20, right: 60, bottom: 30, left: 10 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  if (data.length < 2) return;
+
+  // Extract series
+  const mmSeries = data.map(d => d.mm_realized || 0);
+  const snSeries = data.map(d => d.sniper_pnl || 0);
+  const totalSeries = data.map(d => (d.mm_realized || 0) + (d.mm_unrealized || 0) + (d.sniper_pnl || 0));
+
+  const allVals = [...mmSeries, ...snSeries, ...totalSeries];
+  let minVal = Math.min(...allVals);
+  let maxVal = Math.max(...allVals);
+  if (maxVal === minVal) { maxVal += 1; minVal -= 1; }
+  const range = maxVal - minVal;
+
+  function xPos(i) { return pad.left + (i / (data.length - 1)) * chartW; }
+  function yPos(v) { return pad.top + (1 - (v - minVal) / range) * chartH; }
+
+  // Grid lines
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+  ctx.lineWidth = 0.5;
+  const gridLines = 5;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = pad.top + (i / gridLines) * chartH;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(W - pad.right, y);
+    ctx.stroke();
+
+    // Labels
+    const val = maxVal - (i / gridLines) * range;
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim();
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = 'left';
+    ctx.fillText(fmt$(val), W - pad.right + 6, y + 3);
+  }
+
+  // Zero line
+  if (minVal < 0 && maxVal > 0) {
+    const zeroY = yPos(0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, zeroY);
+    ctx.lineTo(W - pad.right, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Time labels on X axis
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim();
+  ctx.font = '10px JetBrains Mono';
+  ctx.textAlign = 'center';
+  const labelCount = Math.min(6, data.length);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = Math.floor(i / (labelCount - 1) * (data.length - 1));
+    const ts = data[idx]._ts;
+    if (ts) {
+      const d = new Date(ts);
+      const lbl = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      ctx.fillText(lbl, xPos(idx), H - 6);
+    }
+  }
+
+  // Draw line helper
+  function drawLine(series, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < series.length; i++) {
+      const x = xPos(i);
+      const y = yPos(series[i]);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Draw series (order: back to front)
+  drawLine(mmSeries, getComputedStyle(document.documentElement).getPropertyValue('--green').trim(), 1.5);
+  drawLine(snSeries, getComputedStyle(document.documentElement).getPropertyValue('--cyan').trim(), 1.5);
+  drawLine(totalSeries, getComputedStyle(document.documentElement).getPropertyValue('--text-0').trim(), 2);
+}
+
+// Redraw on resize
+window.addEventListener('resize', () => {
+  if (activeTab === 'pnl' && pnlData) drawPnlChart(pnlData);
+});
+
+// ─────────────────────────────────────────────
+// Config Tab
+// ─────────────────────────────────────────────
+
+async function refreshConfig() {
+  const data = await fetchJSON('/api/config');
+  if (!data) return;
+  configLoaded = true;
+
+  const container = document.getElementById('config-content');
+
+  // If structured data available, render nicely
+  const s = data.structured;
+  if (s) {
+    container.innerHTML = `
+      <div class="config-section">
+        <div class="config-section-header">System</div>
+        <div class="config-row"><span class="config-key">Mode</span><span class="config-val" style="color:${s.mode === 'PAPER' ? 'var(--amber)' : 'var(--red)'}">${s.mode}</span></div>
+        <div class="config-row"><span class="config-key">Bankroll</span><span class="config-val">$${(s.bankroll || 0).toLocaleString()}</span></div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-header">Market Maker</div>
+        ${s.mm ? Object.entries(s.mm).map(([k, v]) => `
+          <div class="config-row">
+            <span class="config-key">${k.replace(/_/g, ' ')}</span>
+            <span class="config-val">${typeof v === 'number' && k.includes('spread') ? (v * 100).toFixed(1) + '¢' : typeof v === 'number' && (k.includes('position') || k.includes('inventory') || k.includes('loss')) ? '$' + v : v}</span>
+          </div>
+        `).join('') : ''}
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-header">Sniper</div>
+        ${s.sniper ? Object.entries(s.sniper).map(([k, v]) => `
+          <div class="config-row">
+            <span class="config-key">${k.replace(/_/g, ' ')}</span>
+            <span class="config-val">${typeof v === 'number' && (k.includes('size') || k.includes('exposure')) ? '$' + v : typeof v === 'number' && k.includes('pct') ? v + '%' : typeof v === 'number' && k.includes('cents') ? v + '¢' : v}</span>
+          </div>
+        `).join('') : ''}
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-header">Meta Strategist</div>
+        ${s.meta ? Object.entries(s.meta).map(([k, v]) => `
+          <div class="config-row">
+            <span class="config-key">${k.replace(/_/g, ' ')}</span>
+            <span class="config-val">${k === 'auto_apply' ? (v ? '<span style="color:var(--green)">ON</span>' : '<span style="color:var(--red)">OFF</span>') : k.includes('hours') ? v + 'h' : v}</span>
+          </div>
+        `).join('') : ''}
+      </div>
+    `;
+  } else {
+    // Fallback: render plain text
+    container.innerHTML = `
+      <div class="config-section">
+        <div class="config-section-header">Configuration</div>
+        <pre style="padding:14px;font-size:12px;color:var(--text-1);white-space:pre-wrap;line-height:1.8">${data.text || data.config || 'No config available'}</pre>
+      </div>
+    `;
+  }
+}
+
 // ── Main Refresh Loop ──
 async function refresh() {
-  const [statusData, mmData, sniperData, metaData] = await Promise.all([
-    fetchJSON('/api/status'),
-    fetchJSON('/api/mm'),
-    fetchJSON('/api/sniper'),
-    fetchJSON('/api/meta'),
-  ]);
-
+  // Always fetch status for header
+  const statusData = await fetchJSON('/api/status');
   state.status = statusData;
-  state.mm = mmData;
-  state.sniper = sniperData;
-  state.meta = metaData;
-
   updateHeader(statusData);
-  updateSystem(statusData);
-  updateMM(mmData);
-  updateSniper(sniperData);
-  updateGapRadar(sniperData);
-  updateEventLog(sniperData);
-  updateMeta(metaData);
+
+  if (activeTab === 'dashboard') {
+    const [mmData, sniperData, metaData] = await Promise.all([
+      fetchJSON('/api/mm'),
+      fetchJSON('/api/sniper'),
+      fetchJSON('/api/meta'),
+    ]);
+
+    state.mm = mmData;
+    state.sniper = sniperData;
+    state.meta = metaData;
+
+    updateSystem(statusData);
+    updateFeeds(statusData);
+    updateMM(mmData);
+    updateSniper(sniperData);
+    updateGapRadar(sniperData);
+    updateEventLog(sniperData);
+    updateMeta(metaData);
+  } else if (activeTab === 'trades') {
+    refreshTrades();
+  } else if (activeTab === 'pnl') {
+    refreshPnl();
+  }
+  // Config tab doesn't auto-refresh (static config)
 }
 
 // Start
