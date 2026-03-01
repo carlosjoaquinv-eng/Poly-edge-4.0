@@ -931,6 +931,7 @@ class DashboardAPI:
         app.router.add_get("/api/sniper", self._handle_sniper)
         app.router.add_get("/api/meta", self._handle_meta)
         app.router.add_get("/api/config", self._handle_config)
+        app.router.add_get("/api/trades", self._handle_trades)
         app.router.add_get("/api/history", self._handle_history)
         app.router.add_get("/health", self._handle_health)
         
@@ -985,8 +986,52 @@ class DashboardAPI:
     
     async def _handle_config(self, request):
         from aiohttp import web
-        return web.json_response({"config": self.config.summary()})
-    
+        cfg = self.config
+        return web.json_response({
+            "text": cfg.summary(),
+            "structured": {
+                "mode": "PAPER" if cfg.PAPER_MODE else "LIVE",
+                "bankroll": cfg.BANKROLL,
+                "mm": {
+                    "max_markets": cfg.mm.max_markets,
+                    "max_position_per_market": cfg.mm.max_position_per_market,
+                    "max_total_inventory": cfg.mm.max_total_inventory,
+                    "target_half_spread": cfg.mm.target_half_spread,
+                    "kelly_fraction": cfg.mm.kelly_fraction,
+                    "max_loss_per_day": cfg.mm.max_loss_per_day,
+                },
+                "sniper": {
+                    "min_gap_cents": cfg.sniper.min_gap_cents,
+                    "min_edge_pct": cfg.sniper.min_edge_pct,
+                    "max_trade_size": cfg.sniper.max_trade_size,
+                    "max_total_exposure": cfg.sniper.max_total_exposure,
+                    "kelly_fraction": cfg.sniper.kelly_fraction,
+                },
+                "meta": {
+                    "model": cfg.meta.model,
+                    "run_interval_hours": cfg.meta.run_interval_hours,
+                    "auto_apply": cfg.meta.auto_apply_adjustments,
+                },
+            }
+        })
+
+    async def _handle_trades(self, request):
+        from aiohttp import web
+        if not self.sniper:
+            return web.json_response({"active": [], "completed": [], "summary": {}})
+        stats = self.sniper.executor.get_stats()
+        executor_state = self.sniper.executor.save_state()
+        return web.json_response({
+            "active": stats.get("active_positions", []),
+            "completed": executor_state.get("completed_trades", []),
+            "summary": {
+                "total_trades": stats.get("completed_trades", 0),
+                "win_rate": stats.get("win_rate", 0),
+                "total_pnl": stats.get("total_pnl", 0),
+                "avg_pnl": stats.get("avg_pnl", 0),
+            }
+        })
+
     async def _handle_health(self, request):
         from aiohttp import web
         return web.json_response({"status": "ok", "version": self.config.VERSION})
