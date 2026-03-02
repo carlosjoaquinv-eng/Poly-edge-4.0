@@ -547,18 +547,36 @@ body::after {
 .log-msg { color: var(--text-1); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Inventory Bars ── */
-.inv-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.inv-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .inv-label {
   font-family: var(--sans);
   font-size: 11px;
   font-weight: 500;
-  min-width: 180px;
-  max-width: 220px;
+  min-width: 140px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-1);
 }
+.inv-link {
+  color: var(--text-1);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.inv-link:hover { color: var(--cyan); }
+.quote-market-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quote-market-link {
+  color: var(--cyan);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.quote-market-link:hover { color: var(--cyan-bright); text-decoration: underline; }
 .inv-track {
   flex: 1;
   height: 22px;
@@ -1283,6 +1301,30 @@ function fmtShort(s, len = 45) {
   if (!s) return '—';
   return s.length > len ? s.substring(0, len) + '…' : s;
 }
+
+function smartName(s, maxLen) {
+  if (!s) return '—';
+  // Numeric condition IDs → short hash
+  if (/^\d{10,}/.test(s)) return '#' + s.substring(0, 6);
+  let n = s;
+  // Strip question mark and trailing whitespace
+  n = n.replace(/\?\s*$/, '');
+  // Strip common question prefixes
+  n = n.replace(/^Will\s+/i, '');
+  n = n.replace(/^New\s+/i, '');
+  // Strip articles and filler words
+  n = n.replace(/\bthe\s+/gi, '');
+  n = n.replace(/\bwin\s+/gi, '');
+  n = n.replace(/\bbefore\s+/gi, '');
+  n = n.replace(/\breturn\s+/gi, '');
+  n = n.replace(/\bcome out\s+/gi, '');
+  n = n.replace(/\bbe released\s+/gi, '');
+  // Clean double spaces
+  n = n.replace(/\s{2,}/g, ' ').trim();
+  // Truncate if still too long
+  if (maxLen && n.length > maxLen) n = n.substring(0, maxLen) + '…';
+  return n;
+}
 function pnlClass(v) {
   if (v > 0.01) return 'stat-positive';
   if (v < -0.01) return 'stat-negative';
@@ -1423,7 +1465,7 @@ function updateMM(mm) {
       ask_size: q.ask ? parseFloat(q.ask.split('x')[1]) : 0,
       spread: q.bid && q.ask ? parseFloat(q.ask.split('x')[0]) - parseFloat(q.bid.split('x')[0]) : null,
       fair_value: q.fair_value,
-      market: q.question || tid.substring(0, 12) + '…',
+      market: q.question || tid,
       url: q.url || '',
     }));
   }
@@ -1457,12 +1499,14 @@ function updateQuotes(quotes) {
     return;
   }
   tbody.innerHTML = quotes.map(q => {
+    const fullName = q.market || q.condition_id || '—';
+    const shortLabel = smartName(fullName, 38);
     const label = q.url
-      ? `<a href="${q.url}" target="_blank" style="color:var(--cyan);text-decoration:none" title="${q.market}">${q.market}</a>`
-      : (q.market || q.condition_id);
+      ? `<a href="${q.url}" target="_blank" class="quote-market-link" title="${fullName}">${shortLabel}</a>`
+      : `<span title="${fullName}">${shortLabel}</span>`;
     return `
     <tr>
-      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${q.market || q.condition_id}">${label}</td>
+      <td class="quote-market-cell">${label}</td>
       <td style="color:var(--green)">${fmtPrice(q.bid_price)}</td>
       <td style="color:var(--red)">${fmtPrice(q.ask_price)}</td>
       <td style="color:var(--amber)">${q.spread ? (q.spread * 100).toFixed(1) + '¢' : '—'}</td>
@@ -1484,16 +1528,17 @@ function updateInventory(positions, tokenNames) {
   panel.innerHTML = Object.entries(positions).map(([market, pos]) => {
     const net = pos.net_position || pos.net || 0;
     const tid = pos.token_id || market;
-    const name = tokenNames[tid] || tokenNames[market] || fmtShort(market, 14);
+    const fullName = tokenNames[tid] || tokenNames[market] || market;
+    const shortLabel = smartName(fullName);
     const url = tokenNames[tid + '_url'] || tokenNames[market + '_url'] || '';
     const pct = Math.min(Math.abs(net) / maxPos * 50, 50);
     const isLong = net > 0;
     const label = url
-      ? `<a href="${url}" target="_blank" style="color:inherit;text-decoration:none" title="${name}">${name}</a>`
-      : `<span title="${name}">${name}</span>`;
+      ? `<a href="${url}" target="_blank" class="inv-link" title="${fullName}">${shortLabel}</a>`
+      : `<span title="${fullName}">${shortLabel}</span>`;
     return `
       <div class="inv-row">
-        <span class="inv-label" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
+        <span class="inv-label">${label}</span>
         <div class="inv-track">
           <div class="inv-center"></div>
           ${isLong
