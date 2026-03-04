@@ -954,12 +954,54 @@ class DashboardAPI:
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
     
+    def _make_auth_middleware(self):
+        """Create HTTP Basic Auth middleware. /health is always public."""
+        from aiohttp import web
+        import base64
+
+        password = self.config.DASHBOARD_PASSWORD
+
+        @web.middleware
+        async def auth_middleware(request, handler):
+            # /health is always public (for uptime monitors)
+            if request.path == "/health":
+                return await handler(request)
+
+            # If no password configured, skip auth
+            if not password:
+                return await handler(request)
+
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(auth_header[6:]).decode()
+                    _, pwd = decoded.split(":", 1)
+                    if pwd == password:
+                        return await handler(request)
+                except Exception:
+                    pass
+
+            return web.Response(
+                status=401,
+                headers={"WWW-Authenticate": 'Basic realm="PolyEdge v4"'},
+                text="Unauthorized",
+            )
+
+        return auth_middleware
+
     async def start(self):
         """Start the dashboard HTTP server."""
         from aiohttp import web
-        
-        app = web.Application()
-        
+
+        middlewares = []
+        if self.config.DASHBOARD_PASSWORD:
+            middlewares.append(self._make_auth_middleware())
+            self.logger.info("Dashboard auth ENABLED (password set)")
+        else:
+            self.logger.warning("Dashboard auth DISABLED — set DASHBOARD_PASSWORD to protect it")
+
+        app = web.Application(middlewares=middlewares)
+
         # API endpoints
         app.router.add_get("/api/status", self._handle_status)
         app.router.add_get("/api/mm", self._handle_mm)
@@ -1286,8 +1328,11 @@ class PolyEdgeV4:
         # Dashboard
         self.dashboard: Optional[DashboardAPI] = None
 
-        # Engine health alert flags (one-shot per engine)
-        self._engine_stop_alerted = {"MM": False, "Sniper": False, "Meta": False}
+        # Engine health alert flags (one-shot per component)
+        self._engine_stop_alerted = {
+            "MM": False, "Sniper": False, "Meta": False,
+            "Dashboard": False, "WS_stale": False,
+        }
     
     async def start(self):
         """Initialize and start everything."""
@@ -1451,6 +1496,43 @@ class PolyEdgeV4:
                             await self.telegram.send(f"⚠️ <b>{name} engine stopped unexpectedly</b>")
                     elif engine and hasattr(engine, '_running') and engine._running:
                         self._engine_stop_alerted[name] = False
+
+                # Dashboard self-check
+                try:
+                    import aiohttp as _aio
+                    async with _aio.ClientSession() as _sess:
+                        async with _sess.get(
+                            f"http://127.0.0.1:{self.config.DASHBOARD_PORT}/health",
+                            timeout=_aio.ClientTimeout(total=5),
+                        ) as _resp:
+                            if _resp.status != 200:
+                                raise Exception(f"HTTP {_resp.status}")
+                except Exception as _he:
+                    self.logger.error(f"Dashboard health check failed: {_he}")
+                    if not self._engine_stop_alerted.get("Dashboard"):
+                        self._engine_stop_alerted["Dashboard"] = True
+                        await self.telegram.send(
+                            f"🔴 <b>Dashboard not responding</b>\n"
+                            f"Port {self.config.DASHBOARD_PORT} — {_he}"
+                        )
+                else:
+                    if self._engine_stop_alerted.get("Dashboard"):
+                        self._engine_stop_alerted["Dashboard"] = False
+                        await self.telegram.send("✅ <b>Dashboard recovered</b>")
+
+                # WebSocket feed check
+                if self.orderbook_ws:
+                    ws_stats = self.orderbook_ws.get_stats()
+                    last_age = ws_stats.get("last_msg_age_s", 999)
+                    if last_age > 120:  # No data for 2 minutes
+                        if not self._engine_stop_alerted.get("WS_stale"):
+                            self._engine_stop_alerted["WS_stale"] = True
+                            await self.telegram.send(
+                                f"⚠️ <b>Orderbook feed stale</b>\n"
+                                f"Last message: {last_age:.0f}s ago"
+                            )
+                    else:
+                        self._engine_stop_alerted["WS_stale"] = False
 
             except Exception as e:
                 self.logger.error(f"Stats loop error: {e}")

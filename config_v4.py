@@ -58,6 +58,7 @@ class Config:
     # ── Dashboard ──
     DASHBOARD_PORT: int = 8081          # v4 on 8081, v3.1 stays on 8080
     DASHBOARD_HOST: str = "0.0.0.0"
+    DASHBOARD_PASSWORD: str = ""        # If set, enables HTTP Basic Auth on dashboard
     
     # ── Logging ──
     LOG_LEVEL: str = "INFO"
@@ -100,7 +101,8 @@ class Config:
         
         # Dashboard
         self.DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", str(self.DASHBOARD_PORT)))
-        
+        self.DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", self.DASHBOARD_PASSWORD)
+
         # Logging
         self.LOG_LEVEL = os.environ.get("LOG_LEVEL", self.LOG_LEVEL)
         
