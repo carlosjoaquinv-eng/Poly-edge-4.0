@@ -38,6 +38,171 @@
   --mono: 'Fira Code', monospace;
 }
 
+/* ── Light Theme Overrides ── */
+[data-theme="light"] {
+  --bg-0: #f0f2f5;
+  --bg-1: rgba(255,255,255,0.92);
+  --bg-2: rgba(240,242,245,0.85);
+  --bg-3: rgba(230,233,238,0.8);
+  --bg-solid-1: #ffffff;
+  --bg-solid-2: #f5f6f8;
+  --border: rgba(0,0,0,0.08);
+  --border-active: rgba(0,120,180,0.25);
+  --border-glow: rgba(0,120,180,0.35);
+  --text-0: #1a2332;
+  --text-1: #4a5568;
+  --text-2: #718096;
+  --green: #059669;
+  --green-dim: #047857;
+  --red: #dc2626;
+  --red-dim: #b91c1c;
+  --amber: #d97706;
+  --amber-dim: #b45309;
+  --cyan: #0284c7;
+  --cyan-bright: #0369a1;
+  --purple: #7c3aed;
+  --purple-light: #8b5cf6;
+  --blue: #2563eb;
+  --surface-glass: rgba(255,255,255,0.75);
+  --glow-cyan: 0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  --glow-hover: 0 2px 8px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] body::before { opacity: 0 !important; animation: none !important; }
+[data-theme="light"] body::after { opacity: 0 !important; }
+[data-theme="light"] .scanline-overlay { display: none; }
+
+[data-theme="light"] .header {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+[data-theme="light"] .header::after {
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
+  opacity: 0.3;
+}
+
+[data-theme="light"] .tab-bar {
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="light"] .tab-btn:hover {
+  background: rgba(2,132,199,0.06);
+  border-color: rgba(2,132,199,0.15);
+}
+[data-theme="light"] .tab-btn.active {
+  color: var(--cyan);
+  background: rgba(2,132,199,0.08);
+  border-color: rgba(2,132,199,0.25);
+  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+}
+
+[data-theme="light"] .panel {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .panel:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+[data-theme="light"] .panel-header {
+  background: linear-gradient(135deg, rgba(2,132,199,0.03) 0%, transparent 60%);
+}
+
+[data-theme="light"] .metric {
+  background: linear-gradient(135deg, rgba(2,132,199,0.02) 0%, rgba(124,58,237,0.01) 100%);
+}
+[data-theme="light"] .signal-row { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .signal-row:hover { background: rgba(2,132,199,0.05); }
+
+[data-theme="light"] .meta-card { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .adj-row { background: rgba(0,0,0,0.02); }
+
+[data-theme="light"] .dtable td { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .dtable tr:hover td { background: rgba(2,132,199,0.03); }
+[data-theme="light"] .trades-table td { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .trades-table tr:hover td { background: rgba(2,132,199,0.03); }
+
+[data-theme="light"] .config-section {
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .config-section-header {
+  background: linear-gradient(135deg, rgba(2,132,199,0.04) 0%, rgba(124,58,237,0.02) 100%);
+}
+[data-theme="light"] .config-row:hover { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .config-row { border-bottom: 1px solid rgba(0,0,0,0.04); }
+
+[data-theme="light"] .chart-wrapper {
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .range-btn { background: rgba(0,0,0,0.03); }
+[data-theme="light"] .range-btn.active {
+  background: rgba(2,132,199,0.08);
+  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+}
+
+[data-theme="light"] .pnl-bar-track,
+[data-theme="light"] .inv-track { background: rgba(0,0,0,0.04); }
+
+[data-theme="light"] .log-entry { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .log-entry:hover { background: rgba(2,132,199,0.02); }
+
+[data-theme="light"] .stat-positive { color: var(--green); text-shadow: none; }
+[data-theme="light"] .stat-negative { color: var(--red); text-shadow: none; }
+
+[data-theme="light"] .mode-paper {
+  background: rgba(217,119,6,0.08);
+  color: var(--amber);
+  border-color: rgba(217,119,6,0.2);
+  box-shadow: none;
+}
+[data-theme="light"] .dot-green { box-shadow: 0 0 4px var(--green); }
+[data-theme="light"] .dot-red { box-shadow: 0 0 4px var(--red); }
+[data-theme="light"] .dot-amber { box-shadow: 0 0 4px var(--amber); }
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--cyan), var(--purple));
+}
+
+/* ── Theme Toggle ── */
+.theme-toggle {
+  background: rgba(0,180,216,0.1);
+  border: 1px solid rgba(0,180,216,0.3);
+  color: var(--text-0);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.theme-toggle:hover {
+  border-color: var(--cyan);
+  background: rgba(0,180,216,0.2);
+  box-shadow: 0 0 12px rgba(0,180,216,0.2);
+  transform: scale(1.05);
+}
+[data-theme="light"] .theme-toggle {
+  background: rgba(2,132,199,0.08);
+  border-color: rgba(2,132,199,0.25);
+}
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(2,132,199,0.15);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(2,132,199,0.15);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
@@ -888,6 +1053,7 @@ body::after {
     </div>
   </div>
   <div class="header-right">
+    <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" onclick="toggleTheme()">🌙</button>
     <div class="header-stat">
       <div class="header-stat-label">Total PnL</div>
       <div class="header-stat-value stat-neutral" id="total-pnl">$0.00</div>
@@ -1259,6 +1425,37 @@ body::after {
 // ─────────────────────────────────────────────
 // PolyEdge v4 Dashboard — Client
 // ─────────────────────────────────────────────
+
+// ── Theme Toggle ──
+(function initTheme() {
+  const saved = localStorage.getItem('polyedge-theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  const isLight = html.getAttribute('data-theme') === 'light';
+  if (isLight) {
+    html.removeAttribute('data-theme');
+    localStorage.setItem('polyedge-theme', 'dark');
+    if (btn) btn.textContent = '🌙';
+  } else {
+    html.setAttribute('data-theme', 'light');
+    localStorage.setItem('polyedge-theme', 'light');
+    if (btn) btn.textContent = '☀️';
+  }
+}
+
+// Sync button icon on load
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('theme-toggle');
+  if (btn) {
+    btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+  }
+});
 
 const API_BASE = window.location.origin;
 const REFRESH_MS = 5000; // 5 second refresh

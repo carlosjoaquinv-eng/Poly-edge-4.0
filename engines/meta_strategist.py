@@ -559,6 +559,7 @@ Rules:
         self._reports: List[MetaReport] = []
         self._started_at = 0.0
         self._run_count = 0
+        self._next_run_at = 0.0     # Timestamp of next scheduled run
         self._mm_config = None      # Set via set_configs()
         self._sniper_config = None   # Set via set_configs()
 
@@ -600,9 +601,11 @@ Rules:
     
     async def _run_loop(self):
         """Main loop — run analysis periodically."""
-        # Initial delay: wait 1 hour for engines to collect data
-        await asyncio.sleep(3600)
-        
+        # Initial delay: wait 10 min for engines to collect data (2 stats snapshots)
+        initial_delay = 600
+        self._next_run_at = time.time() + initial_delay
+        await asyncio.sleep(initial_delay)
+
         while self._running:
             try:
                 if self._paused:
@@ -611,8 +614,10 @@ Rules:
                 await self.run_analysis()
             except Exception as e:
                 logger.error(f"Meta analysis error: {e}", exc_info=True)
-            
-            await asyncio.sleep(self.config.run_interval_hours * 3600)
+
+            interval = self.config.run_interval_hours * 3600
+            self._next_run_at = time.time() + interval
+            await asyncio.sleep(interval)
     
     async def run_analysis(self, mm_stats: Dict = None, sniper_stats: Dict = None,
                             mm_config=None, sniper_config=None) -> Optional[MetaReport]:
@@ -1032,8 +1037,8 @@ Rules:
             "uptime_hours": round(uptime / 3600, 1),
             "run_count": self._run_count,
             "next_run_in_hours": round(
-                max(0, self.config.run_interval_hours - (uptime % (self.config.run_interval_hours * 3600)) / 3600), 1
-            ),
+                max(0, (self._next_run_at - time.time()) / 3600), 1
+            ) if self._next_run_at > 0 else round(max(0, 600 - uptime) / 3600, 1),
             "total_llm_cost": round(self.llm.total_cost, 4),
             "auto_apply": self.config.auto_apply_adjustments,
             "adjustment_history": self.adjuster.get_history(10),

@@ -294,6 +294,7 @@ class TelegramNotifier:
             {"command": "positions", "description": "📋 Sniper positions"},
             {"command": "pnl", "description": "💰 P&L summary"},
             {"command": "feeds", "description": "📡 Feed status"},
+            {"command": "run_meta", "description": "🧠 Run Meta analysis now"},
             {"command": "kill", "description": "🛑 Toggle MM kill switch"},
             {"command": "stop", "description": "⏹ STOP all engines"},
             {"command": "resume", "description": "▶️ Resume all engines"},
@@ -335,6 +336,7 @@ class TelegramNotifier:
             "/mm": self._cmd_mm,
             "/sniper": self._cmd_sniper,
             "/meta": self._cmd_meta,
+            "/run_meta": self._cmd_run_meta,
             "/quotes": self._cmd_quotes,
             "/positions": self._cmd_positions,
             "/pnl": self._cmd_pnl,
@@ -463,6 +465,39 @@ class TelegramNotifier:
         
         await self.send(msg)
     
+    async def _cmd_run_meta(self):
+        mt = self._engines.get("meta")
+        if not mt:
+            await self.send("❌ Meta not available")
+            return
+        await self.send("🧠 Running Meta analysis... (may take 10-30s)")
+        try:
+            mm = self._engines.get("mm")
+            sniper = self._engines.get("sniper")
+            mm_stats = mm.get_stats() if mm else {}
+            sniper_stats = sniper.get_stats() if sniper else {}
+            report = await mt.run_analysis(mm_stats, sniper_stats)
+            if report:
+                adj_text = "\n".join(
+                    f"  {a.engine}.{a.parameter}: {a.current_value} → {a.new_value} ({a.confidence:.0f}%)"
+                    for a in report.adjustments
+                ) or "  None"
+                recs = "\n".join(f"  • {r}" for r in report.recommendations[:5]) or "  None"
+                msg = (
+                    f"<b>🧠 Meta Analysis #{mt._run_count}</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"{report.summary[:300]}\n\n"
+                    f"<b>Risk:</b> {report.risk_assessment[:200]}\n\n"
+                    f"<b>Adjustments:</b>\n{adj_text}\n\n"
+                    f"<b>Recommendations:</b>\n{recs}\n\n"
+                    f"Cost: ${report.cost_usd:.4f}"
+                )
+                await self.send(msg)
+            else:
+                await self.send("⚠️ Analysis returned no report. Check logs.")
+        except Exception as e:
+            await self.send(f"❌ Meta run failed: {e}")
+
     async def _cmd_quotes(self):
         mm = self._engines.get("mm")
         if not mm:
@@ -933,6 +968,9 @@ class DashboardAPI:
         app.router.add_get("/api/config", self._handle_config)
         app.router.add_get("/api/trades", self._handle_trades)
         app.router.add_get("/api/history", self._handle_history)
+        app.router.add_get("/api/pnl", self._handle_pnl)
+        app.router.add_get("/api/clean_positions", self._handle_clean_positions)
+        app.router.add_post("/api/meta/run", self._handle_meta_run)
         app.router.add_get("/health", self._handle_health)
         
         # Serve dashboard HTML at root
@@ -1041,6 +1079,174 @@ class DashboardAPI:
         n = int(request.query.get("n", "288"))  # Default: 24h of 5-min snapshots
         entries = self.store.load_log("pnl_history", last_n=n) if self.store else []
         return web.json_response(entries)
+
+    async def _handle_pnl(self, request):
+        """Consolidated PnL from Market Maker + Sniper."""
+        from aiohttp import web
+
+        # --- Market Maker PnL ---
+        mm_pnl = {"realized": 0, "unrealized": 0, "total": 0, "exposure": 0, "positions": {}}
+        if self.mm:
+            inv = self.mm.inventory
+            # Build token_id → market name map from active markets
+            token_names = {}
+            for m in self.mm._active_markets:
+                token_names[m.token_id_yes] = m.question
+                token_names[m.token_id_no] = m.question + " (NO)"
+
+            positions = {}
+            for tid, p in inv._positions.items():
+                if abs(p.net_position) > 0.001 or p.n_trades > 0:
+                    positions[tid] = {
+                        "market": token_names.get(tid, tid[:16] + "..."),
+                        "net": round(p.net_position, 4),
+                        "avg_entry": round(p.avg_entry, 4),
+                        "rpnl": round(p.realized_pnl, 4),
+                        "upnl": round(p.unrealized_pnl, 4),
+                        "trades": p.n_trades,
+                        "last_trade": p.last_trade_at,
+                    }
+            mm_pnl = {
+                "realized": round(inv.total_realized_pnl, 4),
+                "unrealized": round(inv.total_unrealized_pnl, 4),
+                "total": round(inv.total_realized_pnl + inv.total_unrealized_pnl, 4),
+                "daily": round(inv.daily_pnl, 4),
+                "exposure": round(inv.total_exposure, 4),
+                "kill_switch": inv.check_kill_switch(),
+                "positions": positions,
+            }
+
+        # --- Sniper PnL ---
+        sniper_pnl = {"total_pnl": 0, "completed_trades": 0, "win_rate": 0, "active_exposure": 0}
+        if self.sniper:
+            ex = self.sniper.executor
+            completed = ex._completed_trades
+            wins = [t for t in completed if t.pnl > 0]
+            sniper_pnl = {
+                "total_pnl": round(sum(t.pnl for t in completed), 4),
+                "completed_trades": len(completed),
+                "win_rate": round(len(wins) / max(len(completed), 1) * 100, 1),
+                "avg_pnl": round(sum(t.pnl for t in completed) / max(len(completed), 1), 4),
+                "active_trades": len(ex._active_trades),
+                "active_exposure": round(ex._total_exposure, 4),
+            }
+
+        # --- Combined ---
+        combined_total = mm_pnl.get("total", 0) + sniper_pnl.get("total_pnl", 0)
+
+        return web.json_response({
+            "market_maker": mm_pnl,
+            "sniper": sniper_pnl,
+            "combined": {
+                "total_pnl": round(combined_total, 4),
+                "mm_contribution": mm_pnl.get("total", 0),
+                "sniper_contribution": sniper_pnl.get("total_pnl", 0),
+            },
+            "timestamp": time.time(),
+        })
+
+    async def _handle_clean_positions(self, request):
+        """List stale positions; ?force=true removes them from the tracker."""
+        from aiohttp import web
+
+        if not self.mm:
+            return web.json_response({"error": "MM engine not available"}, status=503)
+
+        inv = self.mm.inventory
+        force = request.query.get("force", "").lower() == "true"
+
+        # Build set of token_ids belonging to currently active markets
+        active_tids = set()
+        for m in self.mm._active_markets:
+            active_tids.add(m.token_id_yes)
+            active_tids.add(m.token_id_no)
+
+        # NOTE: Do NOT include _active_quotes here — MM quotes tokens
+        # from inventory too, which creates a circular dependency that
+        # prevents orphan detection. Only _active_markets is authoritative.
+
+        # Build token name map
+        token_names = {}
+        for m in self.mm._active_markets:
+            token_names[m.token_id_yes] = m.question
+            token_names[m.token_id_no] = m.question + " (NO)"
+
+        # Find stale positions: in inventory but not in any active market
+        stale = {}
+        for tid, p in list(inv._positions.items()):
+            if tid not in active_tids and (abs(p.net_position) > 0.001 or p.n_trades > 0):
+                stale[tid] = {
+                    "market": token_names.get(tid, tid[:16] + "..."),
+                    "net": round(p.net_position, 4),
+                    "rpnl": round(p.realized_pnl, 4),
+                    "upnl": round(p.unrealized_pnl, 4),
+                    "trades": p.n_trades,
+                    "last_trade": p.last_trade_at,
+                }
+
+        removed = []
+        if force and stale:
+            for tid in stale:
+                del inv._positions[tid]
+                removed.append(tid)
+            self.logger.info(f"Cleaned {len(removed)} stale positions: {[stale[t]['market'] for t in removed]}")
+
+        return web.json_response({
+            "stale_positions": stale,
+            "stale_count": len(stale),
+            "active_token_count": len(active_tids),
+            "force": force,
+            "removed": removed,
+            "removed_count": len(removed),
+        })
+
+    async def _handle_meta_run(self, request):
+        """Trigger a manual Meta Strategist analysis run."""
+        from aiohttp import web
+        import asyncio
+
+        if not self.meta:
+            return web.json_response({"error": "Meta engine not available"}, status=503)
+
+        try:
+            # Get fresh stats for the analysis
+            mm_stats = self.mm.get_stats() if self.mm else {}
+            sniper_stats = self.sniper.get_stats() if self.sniper else {}
+
+            report = await self.meta.run_analysis(mm_stats, sniper_stats)
+
+            if report:
+                return web.json_response({
+                    "status": "ok",
+                    "run_count": self.meta._run_count,
+                    "summary": report.summary,
+                    "risk_assessment": report.risk_assessment,
+                    "adjustments": [
+                        {
+                            "engine": a.engine,
+                            "parameter": a.parameter,
+                            "current": a.current_value,
+                            "recommended": a.new_value,
+                            "reason": a.reason,
+                            "confidence": a.confidence,
+                        }
+                        for a in report.adjustments
+                    ],
+                    "recommendations": report.recommendations,
+                    "cost_usd": round(report.cost_usd, 4),
+                })
+            else:
+                return web.json_response({
+                    "status": "error",
+                    "message": "Analysis returned no report (check logs)",
+                }, status=500)
+
+        except Exception as e:
+            self.logger.error(f"Manual meta run failed: {e}")
+            return web.json_response({
+                "status": "error",
+                "message": str(e),
+            }, status=500)
 
 
 # ─────────────────────────────────────────────
