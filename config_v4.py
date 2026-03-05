@@ -127,6 +127,10 @@ class Config:
             self.sniper.max_total_exposure = float(os.environ["SNIPER_MAX_EXPOSURE"])
         
         # Meta overrides
+        if os.environ.get("META_MODEL"):
+            self.meta.model = os.environ["META_MODEL"]
+        if os.environ.get("META_MAX_TOKENS"):
+            self.meta.max_tokens = int(os.environ["META_MAX_TOKENS"])
         if os.environ.get("META_INTERVAL_HOURS"):
             self.meta.run_interval_hours = float(os.environ["META_INTERVAL_HOURS"])
         if os.environ.get("META_AUTO_APPLY"):

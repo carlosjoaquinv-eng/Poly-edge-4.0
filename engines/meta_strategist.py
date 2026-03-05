@@ -255,37 +255,87 @@ class PerformanceAnalyzer:
 
 class LLMClient:
     """Lightweight Anthropic API client for meta-strategist."""
-    
+
+    # Rough chars-per-token ratio for estimation (conservative)
+    CHARS_PER_TOKEN = 3.5
+    # Haiku 4.5 context window (leave margin for output)
+    MAX_INPUT_TOKENS = 8000  # Conservative limit — keeps cost low and avoids edge cases
+
     def __init__(self, config: MetaConfig):
         self.config = config
         self._api_key: Optional[str] = None
         self._total_cost: float = 0.0
-    
+        self.last_error: Optional[str] = None  # Surface errors to callers
+
     def _get_api_key(self) -> str:
         if not self._api_key:
             import os
             self._api_key = os.environ.get(self.config.api_key_env, "")
         return self._api_key
-    
+
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """Rough token estimate: ~3.5 chars per token for English + JSON."""
+        return int(len(text) / 3.5)
+
+    def _truncate_prompt(self, system_prompt: str, user_prompt: str) -> str:
+        """Truncate user prompt if combined input exceeds safe limit."""
+        sys_tokens = self.estimate_tokens(system_prompt)
+        usr_tokens = self.estimate_tokens(user_prompt)
+        total = sys_tokens + usr_tokens
+
+        if total <= self.MAX_INPUT_TOKENS:
+            return user_prompt
+
+        # Need to trim user prompt
+        budget = self.MAX_INPUT_TOKENS - sys_tokens - 100  # 100 token margin
+        max_chars = int(budget * 3.5)
+
+        if max_chars < 500:
+            logger.error(f"System prompt alone is too large ({sys_tokens} est. tokens)")
+            return user_prompt[:1500]  # Emergency fallback
+
+        logger.warning(
+            f"Prompt too large ({total} est. tokens), truncating user prompt "
+            f"from {usr_tokens} to ~{budget} tokens"
+        )
+        truncated = user_prompt[:max_chars]
+        # Cut at last complete line
+        last_newline = truncated.rfind('\n')
+        if last_newline > max_chars * 0.7:
+            truncated = truncated[:last_newline]
+
+        truncated += "\n\n[... data truncated to fit context window ...]\n"
+        truncated += "\nProvide your analysis and recommended parameter adjustments as JSON."
+        return truncated
+
     async def analyze(self, system_prompt: str, user_prompt: str) -> Tuple[str, float]:
         """
         Call Claude Haiku for analysis.
         Returns: (response_text, cost_usd)
         """
+        self.last_error = None
         api_key = self._get_api_key()
         if not api_key:
+            self.last_error = "No ANTHROPIC_API_KEY set"
             logger.warning("No ANTHROPIC_API_KEY set — using mock response")
             return self._mock_response(user_prompt), 0.0
-        
+
+        # Truncate if prompt is too large
+        user_prompt = self._truncate_prompt(system_prompt, user_prompt)
+
+        est_tokens = self.estimate_tokens(system_prompt + user_prompt)
+        logger.info(f"LLM call: ~{est_tokens} input tokens (model={self.config.model})")
+
         try:
             import aiohttp
-            
+
             headers = {
                 "Content-Type": "application/json",
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
             }
-            
+
             payload = {
                 "model": self.config.model,
                 "max_tokens": self.config.max_tokens,
@@ -293,35 +343,39 @@ class LLMClient:
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             }
-            
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.config.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
+                    timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
                     if resp.status != 200:
                         error = await resp.text()
-                        logger.error(f"LLM API error {resp.status}: {error[:200]}")
+                        self.last_error = f"API {resp.status}: {error[:300]}"
+                        logger.error(f"LLM API error {resp.status}: {error[:500]}")
                         return self._mock_response(user_prompt), 0.0
-                    
+
                     data = await resp.json()
                     text = data.get("content", [{}])[0].get("text", "")
-                    
-                    # Estimate cost (Haiku: $0.25/M input, $1.25/M output)
+
+                    # Calculate cost (Haiku 4.5: $1/M input, $5/M output)
                     usage = data.get("usage", {})
                     input_tokens = usage.get("input_tokens", 0)
                     output_tokens = usage.get("output_tokens", 0)
-                    cost = (input_tokens * 0.25 + output_tokens * 1.25) / 1_000_000
+                    cost = (input_tokens * 1.0 + output_tokens * 5.0) / 1_000_000
                     self._total_cost += cost
-                    
+
+                    logger.info(f"LLM response: {input_tokens} in, {output_tokens} out, ${cost:.4f}")
                     return text, cost
-                    
+
         except ImportError:
+            self.last_error = "aiohttp not installed"
             logger.warning("aiohttp not available — using mock response")
             return self._mock_response(user_prompt), 0.0
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"LLM call failed: {e}")
             return self._mock_response(user_prompt), 0.0
     
@@ -513,38 +567,16 @@ class MetaStrategist:
       6. Send Telegram report
     """
     
-    SYSTEM_PROMPT = """You are a quantitative trading system optimizer for a Polymarket prediction market bot.
+    SYSTEM_PROMPT = """You optimize a Polymarket trading bot's parameters. You do NOT predict markets.
 
-Your role is to analyze performance data and recommend parameter adjustments. You are NOT a market predictor — you optimize the system's risk/reward parameters.
+Engines:
+- MM: two-sided quotes earning spread. Params: target_half_spread, max_position_per_market, max_total_inventory, kelly_fraction, min_liquidity, min_spread_cents.
+- Sniper: event-driven gap trades. Params: min_gap_cents, min_edge_pct, max_trade_size, max_total_exposure, kelly_fraction.
 
-The system has two engines:
-1. Market Maker (MM) — earns spread by posting two-sided quotes. Key params: target_half_spread, max_position_per_market, max_total_inventory, kelly_fraction, min_liquidity, min_spread_cents.
-2. Resolution Sniper — trades event-driven gaps (goals, crypto thresholds). Key params: min_gap_cents, min_edge_pct, max_trade_size, max_total_exposure, kelly_fraction.
+Respond ONLY with valid JSON (no markdown):
+{"summary":"...","risk_assessment":"...","adjustments":[{"engine":"mm|sniper","parameter":"...","current_value":0,"new_value":0,"reason":"...","confidence":0}],"recommendations":["..."]}
 
-You must respond ONLY with a valid JSON object (no markdown, no backticks) with this exact structure:
-{
-  "summary": "2-3 sentence performance summary",
-  "risk_assessment": "1-2 sentence risk assessment",
-  "adjustments": [
-    {
-      "engine": "mm" or "sniper",
-      "parameter": "parameter_name",
-      "current_value": <current>,
-      "new_value": <recommended>,
-      "reason": "why this change",
-      "confidence": 0-100
-    }
-  ],
-  "recommendations": ["actionable recommendation 1", "recommendation 2"]
-}
-
-Rules:
-- Be conservative. Small adjustments (5-15%) are preferred.
-- Don't adjust if there's not enough data (<10 trades).
-- Focus on risk reduction when losing money.
-- Focus on efficiency when profitable.
-- Never recommend increasing exposure by more than 20%.
-- If system is working well, recommend no adjustments."""
+Rules: conservative (5-15% changes), skip if <10 trades, reduce risk when losing, no exposure increase >20%, no changes if working well."""
     
     def __init__(self, config: MetaConfig, telegram=None):
         self.config = config
@@ -636,9 +668,25 @@ Rules:
 
             period = self.analyzer.compute_period_metrics(self.config.run_interval_hours)
             user_prompt = self._build_prompt(snapshot, period)
+
+            prompt_est = LLMClient.estimate_tokens(self.SYSTEM_PROMPT + user_prompt)
+            logger.info(f"Meta run #{self._run_count}: prompt ~{prompt_est} tokens")
+
             response_text, cost = await self.llm.analyze(self.SYSTEM_PROMPT, user_prompt)
+
+            # Surface LLM errors via Telegram so they don't go unnoticed
+            if self.llm.last_error and self.telegram:
+                await self.telegram.send(
+                    f"⚠️ Meta Strategist LLM error (run #{self._run_count}):\n"
+                    f"{self.llm.last_error[:200]}\n"
+                    f"Prompt ~{prompt_est} tokens. Using fallback."
+                )
         except Exception as e:
             logger.error(f"Meta run #{self._run_count} failed during data/LLM phase: {e}", exc_info=True)
+            if self.telegram:
+                await self.telegram.send(
+                    f"❌ Meta Strategist run #{self._run_count} failed:\n{str(e)[:200]}"
+                )
             return None
 
         try:
@@ -840,74 +888,72 @@ Rules:
             await self.telegram.send(msg)
 
     def _build_prompt(self, snapshot: PerformanceSnapshot, period: Dict) -> str:
-        """Build the analysis prompt with current data."""
+        """Build a compact analysis prompt with current data."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        
-        prompt = f"""Analyze this trading system performance as of {now}:
 
-## Current State
-- Total PnL: ${snapshot.total_pnl:.2f}
-- ROI: {snapshot.roi_pct:.2f}%
-- Total Exposure: ${snapshot.total_exposure:.2f} / $500 max
-- Bankroll: ${snapshot.bankroll:.2f}
+        # Flatten period metrics to one-liner summaries (avoid huge JSON dump)
+        period_summary = self._summarize_period(period)
 
-## Market Maker (Engine 1)
-- Active Markets: {snapshot.mm_active_markets}
-- Quotes Placed: {snapshot.mm_quote_count}
-- Fills: {snapshot.mm_fill_count}
-- Realized PnL: ${snapshot.mm_realized_pnl:.2f}
-- Unrealized PnL: ${snapshot.mm_unrealized_pnl:.2f}
-- Exposure: ${snapshot.mm_exposure:.2f} / $200 max
-- Kill Switch: {'TRIGGERED' if snapshot.mm_kill_switch else 'OK'}
+        mm = self._mm_config
+        sn = self._sniper_config
 
-## Resolution Sniper (Engine 2)
-- Events Processed: {snapshot.sniper_events_processed}
-- Gaps Detected: {snapshot.sniper_gaps_detected}
-- Trades Executed: {snapshot.sniper_trades_executed}
-- Win Rate: {snapshot.sniper_win_rate:.1f}%
-- PnL: ${snapshot.sniper_total_pnl:.2f}
-- Exposure: ${snapshot.sniper_exposure:.2f} / $300 max
+        prompt = f"""Performance as of {now}:
 
-## Period Metrics ({period.get('period_hours', 12)}h)
-{json.dumps(period, indent=2)}
+State: PnL=${snapshot.total_pnl:.2f} ROI={snapshot.roi_pct:.2f}% Exposure=${snapshot.total_exposure:.0f}/$500 Bankroll=${snapshot.bankroll:.0f}
 
-## Current Parameters (loaded from live config)
-### MM Config
-- target_half_spread: {self._mm_config.target_half_spread if self._mm_config else 0.015}
-- max_position_per_market: {self._mm_config.max_position_per_market if self._mm_config else 50.0}
-- max_total_inventory: {self._mm_config.max_total_inventory if self._mm_config else 200.0}
-- kelly_fraction: {self._mm_config.kelly_fraction if self._mm_config else 0.25}
-- min_liquidity: {self._mm_config.min_liquidity if self._mm_config else 20000}
-- min_spread_cents: {self._mm_config.min_spread_cents if self._mm_config else 0.5}
+MM: markets={snapshot.mm_active_markets} quotes={snapshot.mm_quote_count} fills={snapshot.mm_fill_count} realized=${snapshot.mm_realized_pnl:.2f} unrealized=${snapshot.mm_unrealized_pnl:.2f} exposure=${snapshot.mm_exposure:.0f}/$200 kill={'TRIGGERED' if snapshot.mm_kill_switch else 'OK'}
 
-### Sniper Config
-- min_gap_cents: {self._sniper_config.min_gap_cents if self._sniper_config else 3.0}
-- min_edge_pct: {self._sniper_config.min_edge_pct if self._sniper_config else 3.0}
-- max_trade_size: {self._sniper_config.max_trade_size if self._sniper_config else 75.0}
-- max_total_exposure: {self._sniper_config.max_total_exposure if self._sniper_config else 300.0}
-- kelly_fraction: {self._sniper_config.kelly_fraction if self._sniper_config else 0.3}
+Sniper: events={snapshot.sniper_events_processed} gaps={snapshot.sniper_gaps_detected} trades={snapshot.sniper_trades_executed} winrate={snapshot.sniper_win_rate:.1f}% pnl=${snapshot.sniper_total_pnl:.2f} exposure=${snapshot.sniper_exposure:.0f}/$300
 
+{period_summary}
+
+MM params: half_spread={mm.target_half_spread if mm else 0.015} max_pos={mm.max_position_per_market if mm else 50} max_inv={mm.max_total_inventory if mm else 200} kelly={mm.kelly_fraction if mm else 0.25} min_liq={mm.min_liquidity if mm else 20000} min_spread={mm.min_spread_cents if mm else 0.5}
+Sniper params: min_gap={sn.min_gap_cents if sn else 3.0} min_edge={sn.min_edge_pct if sn else 3.0} max_trade={sn.max_trade_size if sn else 75} max_exp={sn.max_total_exposure if sn else 300} kelly={sn.kelly_fraction if sn else 0.3}
 """
 
-        # Add outcome history if we have any
+        # Add outcome history (compact)
         if self._completed_outcomes:
             recent = self._completed_outcomes[-5:]
-            prompt += "\n## Past Adjustment Outcomes\n"
-            prompt += "These are outcomes of previous adjustments — use them to calibrate confidence.\n"
+            prompt += "\nPast outcomes: "
+            parts = []
             for o in recent:
-                ts = datetime.fromtimestamp(o.run_timestamp, timezone.utc).strftime("%m-%d %H:%M")
-                prompt += (
-                    f"- [{ts}] {o.outcome.upper()}: PnL delta=${o.pnl_delta:+.2f} "
-                    f"({len(o.adjustments)} params adjusted)\n"
-                )
+                ts = datetime.fromtimestamp(o.run_timestamp, timezone.utc).strftime("%m-%d")
+                parts.append(f"{o.outcome}(${o.pnl_delta:+.2f})")
+            prompt += ", ".join(parts)
             good = sum(1 for o in self._completed_outcomes if o.outcome == "good")
             bad = sum(1 for o in self._completed_outcomes if o.outcome == "bad")
-            rolled = sum(1 for o in self._completed_outcomes if o.outcome == "rolled_back")
-            prompt += f"Overall record: {good} good, {bad} bad, {rolled} rolled back\n"
+            prompt += f" | Record: {good}W {bad}L\n"
 
-        prompt += "\nProvide your analysis and recommended parameter adjustments as JSON."
+        prompt += "\nRespond with JSON adjustments."
 
         return prompt
+
+    @staticmethod
+    def _summarize_period(period: Dict) -> str:
+        """Convert period metrics dict into compact text instead of raw JSON dump."""
+        if "error" in period:
+            return f"Period: {period['error']} ({period.get('snapshots', 0)} snapshots)"
+
+        hours = period.get("period_hours", 12)
+        mm = period.get("mm", {})
+        sn = period.get("sniper", {})
+        combined = period.get("combined", {})
+        risk = period.get("risk", {})
+
+        return (
+            f"Period({hours}h): pnl_delta=${combined.get('period_pnl', 0):.2f} "
+            f"total_pnl=${combined.get('total_pnl', 0):.2f} "
+            f"exposure=${combined.get('total_exposure', 0):.0f}\n"
+            f"  MM({hours}h): pnl_chg=${mm.get('pnl_change', 0):.2f} "
+            f"fills={mm.get('fills', 0)} quotes={mm.get('quotes', 0)} "
+            f"fill_rate={mm.get('fill_rate_pct', 0):.1f}%\n"
+            f"  Sniper({hours}h): pnl_chg=${sn.get('pnl_change', 0):.2f} "
+            f"trades={sn.get('trades', 0)} gaps={sn.get('gaps', 0)} "
+            f"winrate={sn.get('win_rate', 0):.1f}%\n"
+            f"  Risk: max_exp=${risk.get('max_exposure_seen', 0):.0f} "
+            f"util={risk.get('exposure_utilization_pct', 0):.1f}% "
+            f"kill={'YES' if risk.get('mm_kill_switch_triggered') else 'no'}"
+        )
     
     def _parse_response(self, response_text: str, 
                          snapshot: PerformanceSnapshot,
