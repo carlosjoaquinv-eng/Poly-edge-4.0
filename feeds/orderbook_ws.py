@@ -357,6 +357,17 @@ class OrderbookWSFeed:
             logger.debug(f"WS non-JSON message: {raw[:100]}")
             return
 
+        # Polymarket may send arrays of events
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    self._route_event(item)
+            return
+
+        self._route_event(data)
+
+    def _route_event(self, data: dict):
+        """Route a single event dict to the appropriate handler."""
         event_type = data.get("event_type", "")
 
         if event_type == "book":

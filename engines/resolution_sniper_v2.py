@@ -1086,10 +1086,19 @@ class SniperExecutor:
             fake_signal = SimpleNamespace(
                 market_question=td.get("market_question", ""),
                 direction=td.get("direction", ""),
+                gap_cents=td.get("edge", 0),
+                edge_pct=td.get("edge", 0),
                 edge_cents=td.get("edge", 0),
                 decayed_edge=td.get("edge", 0),
                 age_seconds=0,
                 is_expired=True,
+                condition_id="",
+                token_id="",
+                fair_value=0,
+                current_price=0,
+                confidence=0,
+                decay_start=0,
+                reasoning="restored from state",
             )
             trade = SniperTrade(
                 signal=fake_signal,
