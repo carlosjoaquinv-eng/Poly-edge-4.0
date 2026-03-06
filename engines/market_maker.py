@@ -18,6 +18,7 @@ import asyncio
 import math
 import time
 import random
+from engine.core.hmm_regime import RegimeDetector, RegimeConfig
 import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
@@ -476,6 +477,10 @@ class InventoryManager:
     @property
     def total_unrealized_pnl(self) -> float:
         return sum(p.unrealized_pnl for p in self._positions.values())
+    def remove_position(self, token_id):
+        if token_id in self._positions: del self._positions[token_id]; return True
+        return False
+
     
     @property
     def daily_pnl(self) -> float:
@@ -565,6 +570,12 @@ class SpreadAnalyzer:
         self.config = config
         self._scores: Dict[str, float] = {}
     
+    _BLACKLIST_RE = __import__('re').compile(
+        r"jesus|god|devil|satan|gta.*(vi|6)|carti|playboi|kanye|ye\b.*west|alien|ufo|"
+        r"flat.*earth|simulation|time.*travel|zodiac|horoscope|astrology|"
+        r"bigfoot|loch.*ness|illuminati|reptilian|rihanna.*gta|gta.*rihanna",
+        __import__('re').IGNORECASE)
+
     def score_market(self, market: MarketInfo) -> Tuple[bool, float, str]:
         """
         Score a market for MM suitability.
@@ -572,6 +583,10 @@ class SpreadAnalyzer:
         Returns: (eligible, score, reason)
         Score = spread_edge * liquidity_score * time_score
         """
+        # Blacklist filter
+        if self._BLACKLIST_RE.search(market.question):
+            return False, 0, f"Blacklisted: {market.question[:50]}"
+        
         reasons = []
         
         # Gate checks
@@ -645,10 +660,11 @@ class SpreadAnalyzer:
 class QuoteGenerator:
     """Generates bid/ask quotes with inventory skew and randomness."""
     
-    def __init__(self, config: MMConfig, ou: OUCalibrator, inventory: InventoryManager):
+    def __init__(self, config: MMConfig, ou: OUCalibrator, inventory: InventoryManager, hmm: RegimeDetector = None):
         self.config = config
         self.ou = ou
         self.inventory = inventory
+        self.hmm = hmm
     
     def generate_quotes(self, token_id: str, current_mid: float) -> QuotePair:
         """
@@ -670,8 +686,26 @@ class QuoteGenerator:
             # Not enough data — trust the market mid
             fair_value = current_mid
         
-        # 2. Base half-spread
-        half_spread = self.config.target_half_spread
+        # 2. Dynamic half-spread from OU calibration
+        #    Stationary std of OU process: sigma / sqrt(2*theta)
+        #    Tighter spreads for fast mean-reverting markets, wider for volatile ones
+        ou_params_spread = self.ou.get_params(token_id)
+        if ou_params_spread and ou_params_spread.n_obs >= self.ou.config.ou_min_observations:
+            import math as _m
+            stationary_std = ou_params_spread.sigma / _m.sqrt(2 * max(ou_params_spread.theta, 0.001))
+            half_spread = max(
+                self.config.min_spread_cents / 100.0 / 2,
+                min(
+                    self.config.max_spread_cents / 100.0 / 2,
+                    1.5 * stationary_std
+                )
+            )
+        else:
+            half_spread = self.config.target_half_spread
+        
+        # HMM regime: scale spread
+        if self.hmm:
+            half_spread *= self.hmm.get_spread_multiplier(token_id)
         
         # 3. Inventory skew
         skew = self.inventory.compute_skew(token_id)
@@ -780,6 +814,8 @@ class QuoteGenerator:
         kelly_full = net_edge / variance
         kelly_size = kelly_full * self.config.kelly_fraction * self.config.max_position_per_market
         
+        if self.hmm:
+            kelly_size *= self.hmm.get_position_multiplier(token_id)
         return max(self.config.min_quote_size, min(self.config.max_quote_size, kelly_size))
 
 
@@ -809,9 +845,10 @@ class MarketMakerEngine:
         
         # Sub-components
         self.ou = OUCalibrator(config)
+        self.hmm = RegimeDetector()
         self.inventory = InventoryManager(config)
         self.spread_analyzer = SpreadAnalyzer(config)
-        self.quote_gen = QuoteGenerator(config, self.ou, self.inventory)
+        self.quote_gen = QuoteGenerator(config, self.ou, self.inventory, self.hmm)
         
         # State
         self._active_markets: List[MarketInfo] = []
@@ -1038,6 +1075,7 @@ class MarketMakerEngine:
         
         # Record price for OU calibration
         self.ou.record_price(token_id, mid)
+        self.hmm.record_price(token_id, mid)
         
         # Generate new quotes
         pair = self.quote_gen.generate_quotes(token_id, mid)
@@ -1309,6 +1347,7 @@ class MarketMakerEngine:
                     self.inventory.total_realized_pnl + self.inventory.total_unrealized_pnl, 2
                 ),
             },
+            "regimes": self.hmm.get_all_regimes() if self.hmm else {},
             "ou_params": {
                 tid: {
                     "mu": round(p.mu, 4),

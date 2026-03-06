@@ -38,6 +38,171 @@
   --mono: 'Fira Code', monospace;
 }
 
+/* ── Light Theme Overrides ── */
+[data-theme="light"] {
+  --bg-0: #f0f2f5;
+  --bg-1: rgba(255,255,255,0.92);
+  --bg-2: rgba(240,242,245,0.85);
+  --bg-3: rgba(230,233,238,0.8);
+  --bg-solid-1: #ffffff;
+  --bg-solid-2: #f5f6f8;
+  --border: rgba(0,0,0,0.08);
+  --border-active: rgba(0,120,180,0.25);
+  --border-glow: rgba(0,120,180,0.35);
+  --text-0: #1a2332;
+  --text-1: #4a5568;
+  --text-2: #718096;
+  --green: #059669;
+  --green-dim: #047857;
+  --red: #dc2626;
+  --red-dim: #b91c1c;
+  --amber: #d97706;
+  --amber-dim: #b45309;
+  --cyan: #0284c7;
+  --cyan-bright: #0369a1;
+  --purple: #7c3aed;
+  --purple-light: #8b5cf6;
+  --blue: #2563eb;
+  --surface-glass: rgba(255,255,255,0.75);
+  --glow-cyan: 0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  --glow-hover: 0 2px 8px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] body::before { opacity: 0 !important; animation: none !important; }
+[data-theme="light"] body::after { opacity: 0 !important; }
+[data-theme="light"] .scanline-overlay { display: none; }
+
+[data-theme="light"] .header {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+[data-theme="light"] .header::after {
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
+  opacity: 0.3;
+}
+
+[data-theme="light"] .tab-bar {
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="light"] .tab-btn:hover {
+  background: rgba(2,132,199,0.06);
+  border-color: rgba(2,132,199,0.15);
+}
+[data-theme="light"] .tab-btn.active {
+  color: var(--cyan);
+  background: rgba(2,132,199,0.08);
+  border-color: rgba(2,132,199,0.25);
+  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+}
+
+[data-theme="light"] .panel {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .panel:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+[data-theme="light"] .panel-header {
+  background: linear-gradient(135deg, rgba(2,132,199,0.03) 0%, transparent 60%);
+}
+
+[data-theme="light"] .metric {
+  background: linear-gradient(135deg, rgba(2,132,199,0.02) 0%, rgba(124,58,237,0.01) 100%);
+}
+[data-theme="light"] .signal-row { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .signal-row:hover { background: rgba(2,132,199,0.05); }
+
+[data-theme="light"] .meta-card { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .adj-row { background: rgba(0,0,0,0.02); }
+
+[data-theme="light"] .dtable td { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .dtable tr:hover td { background: rgba(2,132,199,0.03); }
+[data-theme="light"] .trades-table td { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .trades-table tr:hover td { background: rgba(2,132,199,0.03); }
+
+[data-theme="light"] .config-section {
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .config-section-header {
+  background: linear-gradient(135deg, rgba(2,132,199,0.04) 0%, rgba(124,58,237,0.02) 100%);
+}
+[data-theme="light"] .config-row:hover { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .config-row { border-bottom: 1px solid rgba(0,0,0,0.04); }
+
+[data-theme="light"] .chart-wrapper {
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+[data-theme="light"] .range-btn { background: rgba(0,0,0,0.03); }
+[data-theme="light"] .range-btn.active {
+  background: rgba(2,132,199,0.08);
+  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+}
+
+[data-theme="light"] .pnl-bar-track,
+[data-theme="light"] .inv-track { background: rgba(0,0,0,0.04); }
+
+[data-theme="light"] .log-entry { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .log-entry:hover { background: rgba(2,132,199,0.02); }
+
+[data-theme="light"] .stat-positive { color: var(--green); text-shadow: none; }
+[data-theme="light"] .stat-negative { color: var(--red); text-shadow: none; }
+
+[data-theme="light"] .mode-paper {
+  background: rgba(217,119,6,0.08);
+  color: var(--amber);
+  border-color: rgba(217,119,6,0.2);
+  box-shadow: none;
+}
+[data-theme="light"] .dot-green { box-shadow: 0 0 4px var(--green); }
+[data-theme="light"] .dot-red { box-shadow: 0 0 4px var(--red); }
+[data-theme="light"] .dot-amber { box-shadow: 0 0 4px var(--amber); }
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--cyan), var(--purple));
+}
+
+/* ── Theme Toggle ── */
+.theme-toggle {
+  background: rgba(0,180,216,0.1);
+  border: 1px solid rgba(0,180,216,0.3);
+  color: var(--text-0);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.theme-toggle:hover {
+  border-color: var(--cyan);
+  background: rgba(0,180,216,0.2);
+  box-shadow: 0 0 12px rgba(0,180,216,0.2);
+  transform: scale(1.05);
+}
+[data-theme="light"] .theme-toggle {
+  background: rgba(2,132,199,0.08);
+  border-color: rgba(2,132,199,0.25);
+}
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(2,132,199,0.15);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(2,132,199,0.15);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
@@ -799,6 +964,126 @@ body::after {
   vertical-align: middle;
 }
 
+/* ── Mode Toggle Switch ── */
+.mode-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mode-toggle-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+.mode-toggle-label.active-paper { color: var(--amber); }
+.mode-toggle-label.active-live { color: var(--red); }
+.mode-toggle-label.inactive { color: var(--text-3); }
+
+.mode-switch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  cursor: pointer;
+}
+.mode-switch input { opacity: 0; width: 0; height: 0; }
+.mode-switch .slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: rgba(255,209,102,0.2);
+  border: 1px solid rgba(255,209,102,0.4);
+  transition: all 0.4s ease;
+}
+.mode-switch input:checked + .slider {
+  background: rgba(239,71,111,0.2);
+  border-color: rgba(239,71,111,0.5);
+}
+.mode-switch .slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  top: 3px;
+  left: 4px;
+  background: var(--amber);
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  box-shadow: 0 0 8px rgba(255,209,102,0.4);
+}
+.mode-switch input:checked + .slider::before {
+  transform: translateX(22px);
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(239,71,111,0.5);
+}
+.mode-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+.mode-confirm-box {
+  background: var(--bg-1);
+  border: 1px solid var(--border-active);
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+.mode-confirm-box h3 {
+  font-family: var(--heading);
+  font-size: 16px;
+  color: var(--text-0);
+  margin: 0 0 12px;
+}
+.mode-confirm-box p {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+.mode-confirm-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.mode-confirm-btns button {
+  padding: 8px 24px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+.btn-cancel {
+  background: transparent;
+  color: var(--text-2);
+}
+.btn-cancel:hover { background: rgba(255,255,255,0.05); }
+.btn-confirm-live {
+  background: rgba(239,71,111,0.15);
+  color: var(--red);
+  border-color: rgba(239,71,111,0.4);
+}
+.btn-confirm-live:hover { background: rgba(239,71,111,0.25); }
+.btn-confirm-paper {
+  background: rgba(255,209,102,0.15);
+  color: var(--amber);
+  border-color: rgba(255,209,102,0.4);
+}
+.btn-confirm-paper:hover { background: rgba(255,209,102,0.25); }
+
 /* ── Config Tab ── */
 .config-container { padding: 20px 24px; max-width: 1000px; margin: 0 auto; }
 .config-section {
@@ -888,6 +1173,7 @@ body::after {
     </div>
   </div>
   <div class="header-right">
+    <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" onclick="toggleTheme()">🌙</button>
     <div class="header-stat">
       <div class="header-stat-label">Total PnL</div>
       <div class="header-stat-value stat-neutral" id="total-pnl">$0.00</div>
@@ -1259,6 +1545,37 @@ body::after {
 // ─────────────────────────────────────────────
 // PolyEdge v4 Dashboard — Client
 // ─────────────────────────────────────────────
+
+// ── Theme Toggle ──
+(function initTheme() {
+  const saved = localStorage.getItem('polyedge-theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  const isLight = html.getAttribute('data-theme') === 'light';
+  if (isLight) {
+    html.removeAttribute('data-theme');
+    localStorage.setItem('polyedge-theme', 'dark');
+    if (btn) btn.textContent = '🌙';
+  } else {
+    html.setAttribute('data-theme', 'light');
+    localStorage.setItem('polyedge-theme', 'light');
+    if (btn) btn.textContent = '☀️';
+  }
+}
+
+// Sync button icon on load
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('theme-toggle');
+  if (btn) {
+    btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+  }
+});
 
 const API_BASE = window.location.origin;
 const REFRESH_MS = 5000; // 5 second refresh
@@ -2025,10 +2342,23 @@ async function refreshConfig() {
 
   const s = data.structured;
   if (s) {
+    const isPaper = s.mode === 'PAPER';
     container.innerHTML = `
       <div class="config-section">
         <div class="config-section-header">System</div>
-        <div class="config-row"><span class="config-key">Mode</span><span class="config-val" style="color:${s.mode === 'PAPER' ? 'var(--amber)' : 'var(--red)'}">${s.mode}</span></div>
+        <div class="config-row">
+          <span class="config-key">Trading Mode</span>
+          <span class="config-val">
+            <div class="mode-toggle-container">
+              <span class="mode-toggle-label ${isPaper ? 'active-paper' : 'inactive'}">PAPER</span>
+              <label class="mode-switch">
+                <input type="checkbox" id="mode-toggle-switch" ${!isPaper ? 'checked' : ''} onchange="handleModeToggle(this)">
+                <span class="slider"></span>
+              </label>
+              <span class="mode-toggle-label ${!isPaper ? 'active-live' : 'inactive'}">LIVE</span>
+            </div>
+          </span>
+        </div>
         <div class="config-row"><span class="config-key">Bankroll</span><span class="config-val">$${(s.bankroll || 0).toLocaleString()}</span></div>
       </div>
 
@@ -2070,6 +2400,95 @@ async function refreshConfig() {
       </div>
     `;
   }
+}
+
+function handleModeToggle(checkbox) {
+  const targetMode = checkbox.checked ? 'LIVE' : 'PAPER';
+  const currentMode = checkbox.checked ? 'PAPER' : 'LIVE';
+
+  // Revert toggle immediately — only commit after confirmation
+  checkbox.checked = !checkbox.checked;
+
+  const isGoingLive = targetMode === 'LIVE';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mode-confirm-overlay';
+  overlay.innerHTML = `
+    <div class="mode-confirm-box">
+      <h3>${isGoingLive ? '🔴 Switch to LIVE?' : '🟡 Switch to PAPER?'}</h3>
+      <p>${isGoingLive
+        ? 'This will enable <b>real trading</b> with real money on Polymarket.<br>Make sure your wallet is funded with USDC.e on Polygon.<br><br>A PM2 restart is required after switching.'
+        : 'This will disable real trading and switch back to <b>paper simulation</b>.<br><br>A PM2 restart is required after switching.'
+      }</p>
+      <div class="mode-confirm-btns">
+        <button class="btn-cancel" onclick="this.closest('.mode-confirm-overlay').remove()">Cancel</button>
+        <button class="${isGoingLive ? 'btn-confirm-live' : 'btn-confirm-paper'}" onclick="confirmModeSwitch('${targetMode}', this)">
+          ${isGoingLive ? 'Go LIVE' : 'Go PAPER'}
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Close on background click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+async function confirmModeSwitch(targetMode, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Switching...';
+
+  try {
+    const resp = await fetch(API_BASE + '/api/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ mode: targetMode }),
+    });
+    const data = await resp.json();
+
+    const overlay = btn.closest('.mode-confirm-overlay');
+    if (overlay) overlay.remove();
+
+    if (data.error) {
+      showToast(data.error, 'error');
+      return;
+    }
+
+    showToast(data.message || 'Mode updated', targetMode === 'LIVE' ? 'warning' : 'success');
+
+    // Refresh config to reflect new state label
+    configLoaded = false;
+    refreshConfig();
+
+  } catch (e) {
+    showToast('Failed to switch mode: ' + e.message, 'error');
+    const overlay = btn.closest('.mode-confirm-overlay');
+    if (overlay) overlay.remove();
+  }
+}
+
+function getAuthHeaders() {
+  // Dashboard uses HTTP Basic Auth — credentials are passed by the browser
+  // This function returns empty headers; browser handles Basic auth via prompt
+  return {};
+}
+
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px; z-index: 10000;
+    padding: 14px 22px; border-radius: 10px; font-family: var(--mono);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    animation: fadeInUp 0.3s ease; max-width: 400px;
+    ${type === 'error' ? 'background:rgba(239,71,111,0.15);color:var(--red);border:1px solid rgba(239,71,111,0.3);' :
+      type === 'warning' ? 'background:rgba(255,209,102,0.15);color:var(--amber);border:1px solid rgba(255,209,102,0.3);' :
+      'background:rgba(6,214,160,0.15);color:var(--green);border:1px solid rgba(6,214,160,0.3);'}
+  `;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
 }
 
 // ── Main Refresh Loop ──

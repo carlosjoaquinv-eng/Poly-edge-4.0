@@ -58,6 +58,7 @@ class Config:
     # ── Dashboard ──
     DASHBOARD_PORT: int = 8081          # v4 on 8081, v3.1 stays on 8080
     DASHBOARD_HOST: str = "0.0.0.0"
+    DASHBOARD_PASSWORD: str = ""        # If set, enables HTTP Basic Auth on dashboard
     
     # ── Logging ──
     LOG_LEVEL: str = "INFO"
@@ -100,7 +101,8 @@ class Config:
         
         # Dashboard
         self.DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", str(self.DASHBOARD_PORT)))
-        
+        self.DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", self.DASHBOARD_PASSWORD)
+
         # Logging
         self.LOG_LEVEL = os.environ.get("LOG_LEVEL", self.LOG_LEVEL)
         
@@ -127,10 +129,6 @@ class Config:
             self.sniper.max_total_exposure = float(os.environ["SNIPER_MAX_EXPOSURE"])
         
         # Meta overrides
-        if os.environ.get("META_MODEL"):
-            self.meta.model = os.environ["META_MODEL"]
-        if os.environ.get("META_MAX_TOKENS"):
-            self.meta.max_tokens = int(os.environ["META_MAX_TOKENS"])
         if os.environ.get("META_INTERVAL_HOURS"):
             self.meta.run_interval_hours = float(os.environ["META_INTERVAL_HOURS"])
         if os.environ.get("META_AUTO_APPLY"):

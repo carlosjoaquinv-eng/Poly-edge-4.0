@@ -294,6 +294,7 @@ class TelegramNotifier:
             {"command": "positions", "description": "📋 Sniper positions"},
             {"command": "pnl", "description": "💰 P&L summary"},
             {"command": "feeds", "description": "📡 Feed status"},
+            {"command": "run_meta", "description": "🧠 Run Meta analysis now"},
             {"command": "kill", "description": "🛑 Toggle MM kill switch"},
             {"command": "stop", "description": "⏹ STOP all engines"},
             {"command": "resume", "description": "▶️ Resume all engines"},
@@ -335,6 +336,7 @@ class TelegramNotifier:
             "/mm": self._cmd_mm,
             "/sniper": self._cmd_sniper,
             "/meta": self._cmd_meta,
+            "/run_meta": self._cmd_run_meta,
             "/quotes": self._cmd_quotes,
             "/positions": self._cmd_positions,
             "/pnl": self._cmd_pnl,
@@ -463,6 +465,39 @@ class TelegramNotifier:
         
         await self.send(msg)
     
+    async def _cmd_run_meta(self):
+        mt = self._engines.get("meta")
+        if not mt:
+            await self.send("❌ Meta not available")
+            return
+        await self.send("🧠 Running Meta analysis... (may take 10-30s)")
+        try:
+            mm = self._engines.get("mm")
+            sniper = self._engines.get("sniper")
+            mm_stats = mm.get_stats() if mm else {}
+            sniper_stats = sniper.get_stats() if sniper else {}
+            report = await mt.run_analysis(mm_stats, sniper_stats)
+            if report:
+                adj_text = "\n".join(
+                    f"  {a.engine}.{a.parameter}: {a.current_value} → {a.new_value} ({a.confidence:.0f}%)"
+                    for a in report.adjustments
+                ) or "  None"
+                recs = "\n".join(f"  • {r}" for r in report.recommendations[:5]) or "  None"
+                msg = (
+                    f"<b>🧠 Meta Analysis #{mt._run_count}</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"{report.summary[:300]}\n\n"
+                    f"<b>Risk:</b> {report.risk_assessment[:200]}\n\n"
+                    f"<b>Adjustments:</b>\n{adj_text}\n\n"
+                    f"<b>Recommendations:</b>\n{recs}\n\n"
+                    f"Cost: ${report.cost_usd:.4f}"
+                )
+                await self.send(msg)
+            else:
+                await self.send("⚠️ Analysis returned no report. Check logs.")
+        except Exception as e:
+            await self.send(f"❌ Meta run failed: {e}")
+
     async def _cmd_quotes(self):
         mm = self._engines.get("mm")
         if not mm:
@@ -919,12 +954,54 @@ class DashboardAPI:
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
     
+    def _make_auth_middleware(self):
+        """Create HTTP Basic Auth middleware. /health is always public."""
+        from aiohttp import web
+        import base64
+
+        password = self.config.DASHBOARD_PASSWORD
+
+        @web.middleware
+        async def auth_middleware(request, handler):
+            # /health is always public (for uptime monitors)
+            if request.path == "/health":
+                return await handler(request)
+
+            # If no password configured, skip auth
+            if not password:
+                return await handler(request)
+
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(auth_header[6:]).decode()
+                    _, pwd = decoded.split(":", 1)
+                    if pwd == password:
+                        return await handler(request)
+                except Exception:
+                    pass
+
+            return web.Response(
+                status=401,
+                headers={"WWW-Authenticate": 'Basic realm="PolyEdge v4"'},
+                text="Unauthorized",
+            )
+
+        return auth_middleware
+
     async def start(self):
         """Start the dashboard HTTP server."""
         from aiohttp import web
-        
-        app = web.Application()
-        
+
+        middlewares = []
+        if self.config.DASHBOARD_PASSWORD:
+            middlewares.append(self._make_auth_middleware())
+            self.logger.info("Dashboard auth ENABLED (password set)")
+        else:
+            self.logger.warning("Dashboard auth DISABLED — set DASHBOARD_PASSWORD to protect it")
+
+        app = web.Application(middlewares=middlewares)
+
         # API endpoints
         app.router.add_get("/api/status", self._handle_status)
         app.router.add_get("/api/mm", self._handle_mm)
@@ -933,6 +1010,10 @@ class DashboardAPI:
         app.router.add_get("/api/config", self._handle_config)
         app.router.add_get("/api/trades", self._handle_trades)
         app.router.add_get("/api/history", self._handle_history)
+        app.router.add_get("/api/pnl", self._handle_pnl)
+        app.router.add_get("/api/clean_positions", self._handle_clean_positions)
+        app.router.add_post("/api/meta/run", self._handle_meta_run)
+        app.router.add_post("/api/mode", self._handle_mode_toggle)
         app.router.add_get("/health", self._handle_health)
         
         # Serve dashboard HTML at root
@@ -1032,6 +1113,89 @@ class DashboardAPI:
             }
         })
 
+    async def _handle_mode_toggle(self, request):
+        """Toggle between PAPER and LIVE mode. Requires restart to take effect."""
+        from aiohttp import web
+        import json
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        target_mode = body.get("mode", "").upper()
+        if target_mode not in ("PAPER", "LIVE"):
+            return web.json_response(
+                {"error": "Invalid mode. Use 'PAPER' or 'LIVE'."}, status=400
+            )
+
+        current_mode = "PAPER" if self.config.PAPER_MODE else "LIVE"
+        if target_mode == current_mode:
+            return web.json_response({
+                "status": "no_change",
+                "mode": current_mode,
+                "message": f"Already in {current_mode} mode.",
+            })
+
+        # Check credentials before allowing switch to LIVE
+        if target_mode == "LIVE":
+            missing = []
+            if not self.config.PRIVATE_KEY:
+                missing.append("PRIVATE_KEY")
+            if not getattr(self.config, "POLYMARKET_API_KEY", ""):
+                missing.append("POLYMARKET_API_KEY")
+            if not getattr(self.config, "POLYMARKET_API_SECRET", ""):
+                missing.append("POLYMARKET_API_SECRET")
+            if missing:
+                return web.json_response({
+                    "error": f"Cannot switch to LIVE: missing credentials: {', '.join(missing)}",
+                    "missing": missing,
+                }, status=400)
+
+        # Update .env file on disk
+        env_path = "/root/polyedge/v4/.env"
+        try:
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+
+            new_value = "false" if target_mode == "LIVE" else "true"
+            updated = False
+            for i, line in enumerate(lines):
+                if line.strip().startswith("PAPER_MODE="):
+                    lines[i] = f"PAPER_MODE={new_value}\n"
+                    updated = True
+                    break
+            if not updated:
+                lines.append(f"PAPER_MODE={new_value}\n")
+
+            with open(env_path, "w") as f:
+                f.writelines(lines)
+
+            self.logger.warning(f"🔄 Mode changed: {current_mode} → {target_mode} (restart required)")
+
+            # Send Telegram alert
+            if self.telegram:
+                emoji = "🟢" if target_mode == "LIVE" else "🟡"
+                await self.telegram.send(
+                    f"{emoji} <b>Mode changed → {target_mode}</b>\n"
+                    f"Previous: {current_mode}\n"
+                    f"⚠️ Restart required to apply."
+                )
+
+            return web.json_response({
+                "status": "ok",
+                "previous_mode": current_mode,
+                "new_mode": target_mode,
+                "message": f"Switched to {target_mode}. Restart PM2 to apply.",
+                "restart_required": True,
+            })
+
+        except Exception as e:
+            self.logger.error(f"Failed to update mode: {e}")
+            return web.json_response(
+                {"error": f"Failed to update .env: {str(e)}"}, status=500
+            )
+
     async def _handle_health(self, request):
         from aiohttp import web
         return web.json_response({"status": "ok", "version": self.config.VERSION})
@@ -1041,6 +1205,174 @@ class DashboardAPI:
         n = int(request.query.get("n", "288"))  # Default: 24h of 5-min snapshots
         entries = self.store.load_log("pnl_history", last_n=n) if self.store else []
         return web.json_response(entries)
+
+    async def _handle_pnl(self, request):
+        """Consolidated PnL from Market Maker + Sniper."""
+        from aiohttp import web
+
+        # --- Market Maker PnL ---
+        mm_pnl = {"realized": 0, "unrealized": 0, "total": 0, "exposure": 0, "positions": {}}
+        if self.mm:
+            inv = self.mm.inventory
+            # Build token_id → market name map from active markets
+            token_names = {}
+            for m in self.mm._active_markets:
+                token_names[m.token_id_yes] = m.question
+                token_names[m.token_id_no] = m.question + " (NO)"
+
+            positions = {}
+            for tid, p in inv._positions.items():
+                if abs(p.net_position) > 0.001 or p.n_trades > 0:
+                    positions[tid] = {
+                        "market": token_names.get(tid, tid[:16] + "..."),
+                        "net": round(p.net_position, 4),
+                        "avg_entry": round(p.avg_entry, 4),
+                        "rpnl": round(p.realized_pnl, 4),
+                        "upnl": round(p.unrealized_pnl, 4),
+                        "trades": p.n_trades,
+                        "last_trade": p.last_trade_at,
+                    }
+            mm_pnl = {
+                "realized": round(inv.total_realized_pnl, 4),
+                "unrealized": round(inv.total_unrealized_pnl, 4),
+                "total": round(inv.total_realized_pnl + inv.total_unrealized_pnl, 4),
+                "daily": round(inv.daily_pnl, 4),
+                "exposure": round(inv.total_exposure, 4),
+                "kill_switch": inv.check_kill_switch(),
+                "positions": positions,
+            }
+
+        # --- Sniper PnL ---
+        sniper_pnl = {"total_pnl": 0, "completed_trades": 0, "win_rate": 0, "active_exposure": 0}
+        if self.sniper:
+            ex = self.sniper.executor
+            completed = ex._completed_trades
+            wins = [t for t in completed if t.pnl > 0]
+            sniper_pnl = {
+                "total_pnl": round(sum(t.pnl for t in completed), 4),
+                "completed_trades": len(completed),
+                "win_rate": round(len(wins) / max(len(completed), 1) * 100, 1),
+                "avg_pnl": round(sum(t.pnl for t in completed) / max(len(completed), 1), 4),
+                "active_trades": len(ex._active_trades),
+                "active_exposure": round(ex._total_exposure, 4),
+            }
+
+        # --- Combined ---
+        combined_total = mm_pnl.get("total", 0) + sniper_pnl.get("total_pnl", 0)
+
+        return web.json_response({
+            "market_maker": mm_pnl,
+            "sniper": sniper_pnl,
+            "combined": {
+                "total_pnl": round(combined_total, 4),
+                "mm_contribution": mm_pnl.get("total", 0),
+                "sniper_contribution": sniper_pnl.get("total_pnl", 0),
+            },
+            "timestamp": time.time(),
+        })
+
+    async def _handle_clean_positions(self, request):
+        """List stale positions; ?force=true removes them from the tracker."""
+        from aiohttp import web
+
+        if not self.mm:
+            return web.json_response({"error": "MM engine not available"}, status=503)
+
+        inv = self.mm.inventory
+        force = request.query.get("force", "").lower() == "true"
+
+        # Build set of token_ids belonging to currently active markets
+        active_tids = set()
+        for m in self.mm._active_markets:
+            active_tids.add(m.token_id_yes)
+            active_tids.add(m.token_id_no)
+
+        # NOTE: Do NOT include _active_quotes here — MM quotes tokens
+        # from inventory too, which creates a circular dependency that
+        # prevents orphan detection. Only _active_markets is authoritative.
+
+        # Build token name map
+        token_names = {}
+        for m in self.mm._active_markets:
+            token_names[m.token_id_yes] = m.question
+            token_names[m.token_id_no] = m.question + " (NO)"
+
+        # Find stale positions: in inventory but not in any active market
+        stale = {}
+        for tid, p in list(inv._positions.items()):
+            if tid not in active_tids and (abs(p.net_position) > 0.001 or p.n_trades > 0):
+                stale[tid] = {
+                    "market": token_names.get(tid, tid[:16] + "..."),
+                    "net": round(p.net_position, 4),
+                    "rpnl": round(p.realized_pnl, 4),
+                    "upnl": round(p.unrealized_pnl, 4),
+                    "trades": p.n_trades,
+                    "last_trade": p.last_trade_at,
+                }
+
+        removed = []
+        if force and stale:
+            for tid in stale:
+                del inv._positions[tid]
+                removed.append(tid)
+            self.logger.info(f"Cleaned {len(removed)} stale positions: {[stale[t]['market'] for t in removed]}")
+
+        return web.json_response({
+            "stale_positions": stale,
+            "stale_count": len(stale),
+            "active_token_count": len(active_tids),
+            "force": force,
+            "removed": removed,
+            "removed_count": len(removed),
+        })
+
+    async def _handle_meta_run(self, request):
+        """Trigger a manual Meta Strategist analysis run."""
+        from aiohttp import web
+        import asyncio
+
+        if not self.meta:
+            return web.json_response({"error": "Meta engine not available"}, status=503)
+
+        try:
+            # Get fresh stats for the analysis
+            mm_stats = self.mm.get_stats() if self.mm else {}
+            sniper_stats = self.sniper.get_stats() if self.sniper else {}
+
+            report = await self.meta.run_analysis(mm_stats, sniper_stats)
+
+            if report:
+                return web.json_response({
+                    "status": "ok",
+                    "run_count": self.meta._run_count,
+                    "summary": report.summary,
+                    "risk_assessment": report.risk_assessment,
+                    "adjustments": [
+                        {
+                            "engine": a.engine,
+                            "parameter": a.parameter,
+                            "current": a.current_value,
+                            "recommended": a.new_value,
+                            "reason": a.reason,
+                            "confidence": a.confidence,
+                        }
+                        for a in report.adjustments
+                    ],
+                    "recommendations": report.recommendations,
+                    "cost_usd": round(report.cost_usd, 4),
+                })
+            else:
+                return web.json_response({
+                    "status": "error",
+                    "message": "Analysis returned no report (check logs)",
+                }, status=500)
+
+        except Exception as e:
+            self.logger.error(f"Manual meta run failed: {e}")
+            return web.json_response({
+                "status": "error",
+                "message": str(e),
+            }, status=500)
 
 
 # ─────────────────────────────────────────────
@@ -1080,8 +1412,11 @@ class PolyEdgeV4:
         # Dashboard
         self.dashboard: Optional[DashboardAPI] = None
 
-        # Engine health alert flags (one-shot per engine)
-        self._engine_stop_alerted = {"MM": False, "Sniper": False, "Meta": False}
+        # Engine health alert flags (one-shot per component)
+        self._engine_stop_alerted = {
+            "MM": False, "Sniper": False, "Meta": False,
+            "Dashboard": False, "WS_stale": False,
+        }
     
     async def start(self):
         """Initialize and start everything."""
@@ -1245,6 +1580,43 @@ class PolyEdgeV4:
                             await self.telegram.send(f"⚠️ <b>{name} engine stopped unexpectedly</b>")
                     elif engine and hasattr(engine, '_running') and engine._running:
                         self._engine_stop_alerted[name] = False
+
+                # Dashboard self-check
+                try:
+                    import aiohttp as _aio
+                    async with _aio.ClientSession() as _sess:
+                        async with _sess.get(
+                            f"http://127.0.0.1:{self.config.DASHBOARD_PORT}/health",
+                            timeout=_aio.ClientTimeout(total=5),
+                        ) as _resp:
+                            if _resp.status != 200:
+                                raise Exception(f"HTTP {_resp.status}")
+                except Exception as _he:
+                    self.logger.error(f"Dashboard health check failed: {_he}")
+                    if not self._engine_stop_alerted.get("Dashboard"):
+                        self._engine_stop_alerted["Dashboard"] = True
+                        await self.telegram.send(
+                            f"🔴 <b>Dashboard not responding</b>\n"
+                            f"Port {self.config.DASHBOARD_PORT} — {_he}"
+                        )
+                else:
+                    if self._engine_stop_alerted.get("Dashboard"):
+                        self._engine_stop_alerted["Dashboard"] = False
+                        await self.telegram.send("✅ <b>Dashboard recovered</b>")
+
+                # WebSocket feed check
+                if self.orderbook_ws:
+                    ws_stats = self.orderbook_ws.get_stats()
+                    last_age = ws_stats.get("last_msg_age_s", 999)
+                    if last_age > 120:  # No data for 2 minutes
+                        if not self._engine_stop_alerted.get("WS_stale"):
+                            self._engine_stop_alerted["WS_stale"] = True
+                            await self.telegram.send(
+                                f"⚠️ <b>Orderbook feed stale</b>\n"
+                                f"Last message: {last_age:.0f}s ago"
+                            )
+                    else:
+                        self._engine_stop_alerted["WS_stale"] = False
 
             except Exception as e:
                 self.logger.error(f"Stats loop error: {e}")
