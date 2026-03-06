@@ -2064,7 +2064,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     activeTab = tab;
 
     if (tab === 'trades') refreshTrades();
-    if (tab === 'pnl') refreshPnl();
+    if (tab === 'pnl') requestAnimationFrame(() => refreshPnl());
     if (tab === 'config' && !configLoaded) refreshConfig();
   });
 });
@@ -2210,12 +2210,96 @@ async function refreshPnl() {
   ptEl.innerHTML = `<span style="color:var(--green)">${fmt$(peak)}</span> / <span style="color:var(--red)">${fmt$(trough)}</span>`;
 
   drawPnlChart(data);
+  setupPnlHover();
+}
+
+let _pnlHoverSetup = false;
+function setupPnlHover() {
+  if (_pnlHoverSetup) return;
+  const canvas = document.getElementById('pnl-canvas');
+  if (!canvas) return;
+  _pnlHoverSetup = true;
+
+  let tooltip = document.getElementById('pnl-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'pnl-tooltip';
+    tooltip.style.cssText = 'position:absolute;display:none;background:var(--bg-1);border:1px solid var(--border-active);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--text-0);pointer-events:none;z-index:100;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.4);backdrop-filter:blur(12px);';
+    canvas.parentElement.style.position = 'relative';
+    canvas.parentElement.appendChild(tooltip);
+  }
+
+  canvas.addEventListener('mousemove', function(e) {
+    const cs = canvas._chartState;
+    if (!cs || !cs.data || cs.data.length < 2) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+
+    const idx = Math.round((mouseX - cs.pad.left) / cs.chartW * (cs.data.length - 1));
+    if (idx < 0 || idx >= cs.data.length) { tooltip.style.display = 'none'; return; }
+
+    const d = cs.data[idx];
+    const ts = d._ts ? new Date(d._ts) : null;
+    const timeStr = ts ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const dateStr = ts ? ts.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+    tooltip.innerHTML =
+      '<div style="color:var(--text-2);margin-bottom:6px;font-size:10px">' + dateStr + ' ' + timeStr + '</div>' +
+      '<div style="color:#06d6a0">MM Realized: ' + fmt$(cs.mmSeries[idx]) + '</div>' +
+      '<div style="color:#00b4d8">Sniper: ' + fmt$(cs.snSeries[idx]) + '</div>' +
+      '<div style="color:var(--text-0);font-weight:700;margin-top:4px;border-top:1px solid var(--border);padding-top:4px">Total: ' + fmt$(cs.totalSeries[idx]) + '</div>';
+    tooltip.style.display = 'block';
+
+    const tipW = tooltip.offsetWidth;
+    let tipX = mouseX + 14;
+    if (tipX + tipW > rect.width - 10) tipX = mouseX - tipW - 14;
+    tooltip.style.left = tipX + 'px';
+    tooltip.style.top = ((e.clientY - rect.top) - 40) + 'px';
+
+    // Redraw with crosshair
+    drawPnlChart(cs.data);
+    const ctx2 = canvas.getContext('2d');
+    ctx2.save();
+    ctx2.strokeStyle = 'rgba(0,180,216,0.3)';
+    ctx2.lineWidth = 1;
+    ctx2.setLineDash([3, 3]);
+    const cx = cs.xPos(idx);
+    ctx2.beginPath();
+    ctx2.moveTo(cx, cs.pad.top);
+    ctx2.lineTo(cx, cs.H - cs.pad.bottom);
+    ctx2.stroke();
+    ctx2.setLineDash([]);
+
+    [[cs.mmSeries[idx], '#06d6a0'], [cs.snSeries[idx], '#00b4d8'], [cs.totalSeries[idx], '#e4eef8']].forEach(function(pair) {
+      ctx2.fillStyle = pair[1];
+      ctx2.beginPath();
+      ctx2.arc(cx, cs.yPos(pair[0]), 4, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.strokeStyle = pair[1];
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.arc(cx, cs.yPos(pair[0]), 7, 0, Math.PI * 2);
+      ctx2.stroke();
+    });
+    ctx2.restore();
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    tooltip.style.display = 'none';
+    if (pnlData) drawPnlChart(pnlData);
+  });
 }
 
 function drawPnlChart(data) {
   const canvas = document.getElementById('pnl-canvas');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  // Guard: skip if canvas not visible yet
+  if (rect.width === 0 || rect.height === 0) {
+    requestAnimationFrame(() => drawPnlChart(data));
+    return;
+  }
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
@@ -2290,10 +2374,27 @@ function drawPnlChart(data) {
     }
   }
 
-  function drawLine(series, color, width) {
+  function drawLine(series, color, width, fill) {
+    // Gradient fill under line
+    if (fill) {
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+      grad.addColorStop(0, color + '25');
+      grad.addColorStop(1, color + '02');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(xPos(0), yPos(series[0]));
+      for (let i = 1; i < series.length; i++) ctx.lineTo(xPos(i), yPos(series[i]));
+      ctx.lineTo(xPos(series.length - 1), pad.top + chartH);
+      ctx.lineTo(xPos(0), pad.top + chartH);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Line
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.beginPath();
     for (let i = 0; i < series.length; i++) {
       const x = xPos(i);
@@ -2318,11 +2419,22 @@ function drawPnlChart(data) {
     }
     ctx.stroke();
     ctx.restore();
+
+    // End dot
+    const lastX = xPos(series.length - 1);
+    const lastY = yPos(series[series.length - 1]);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  drawLine(mmSeries, '#06d6a0', 1.5);
-  drawLine(snSeries, '#00b4d8', 1.5);
-  drawLine(totalSeries, '#e4eef8', 2);
+  drawLine(mmSeries, '#06d6a0', 1.5, true);
+  drawLine(snSeries, '#00b4d8', 1.5, true);
+  drawLine(totalSeries, '#e4eef8', 2, false);
+
+  // Store chart state for hover
+  canvas._chartState = { data, mmSeries, snSeries, totalSeries, xPos, yPos, pad, chartW, chartH, W, H, minVal, maxVal, range: range };
 }
 
 window.addEventListener('resize', () => {
