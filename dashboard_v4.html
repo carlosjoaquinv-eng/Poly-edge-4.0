@@ -1155,6 +1155,38 @@ body::after {
   .trades-container, .pnl-container, .config-container { padding: 12px; }
   .logo { font-size: 16px; }
 }
+
+/* ── RiskGuard Panel ── */
+.rg-market-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+  font-family: var(--mono); font-size: 10px;
+  transition: background 0.2s;
+}
+.rg-market-row:hover { background: rgba(255,255,255,0.05); }
+.rg-market-name { flex: 0 0 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.rg-bar-container { flex: 1; height: 14px; background: rgba(255,255,255,0.05); border-radius: 3px; position: relative; overflow: hidden; }
+.rg-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.3s; min-width: 2px; }
+.rg-bar-label { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 8px; color: rgba(255,255,255,0.8); font-weight: 600; }
+.rg-action-badge {
+  flex: 0 0 70px; text-align: center; padding: 2px 6px; border-radius: 3px;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.rg-action-none { background: rgba(0,200,150,0.1); color: #00c896; }
+.rg-action-warn { background: rgba(255,183,77,0.15); color: var(--amber); }
+.rg-action-increase_skew { background: rgba(255,183,77,0.2); color: var(--amber); }
+.rg-action-fadeout { background: rgba(239,71,111,0.15); color: var(--red); }
+.rg-action-oneside { background: rgba(239,71,111,0.25); color: var(--red); }
+.rg-action-halt_market { background: rgba(239,71,111,0.35); color: #ff4466; }
+.rg-action-halt_all { background: rgba(239,71,111,0.5); color: #fff; }
+.rg-resume-btn {
+  flex: 0 0 50px; padding: 2px 4px; font-size: 8px; font-family: var(--heading);
+  background: rgba(0,200,150,0.1); border: 1px solid rgba(0,200,150,0.3);
+  color: #00c896; border-radius: 3px; cursor: pointer; letter-spacing: 0.3px;
+  display: none;
+}
+.rg-resume-btn:hover { background: rgba(0,200,150,0.2); }
 </style>
 </head>
 <body>
@@ -1309,6 +1341,36 @@ body::after {
       </div>
       <div id="mm-kill-switch" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(239,71,111,0.1);border:1px solid rgba(239,71,111,0.3);border-radius:6px;font-family:var(--heading);font-size:10px;color:var(--red);font-weight:600;letter-spacing:1px;">
         ⚠ KILL SWITCH TRIGGERED
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel: RiskGuard KPIs -->
+  <div class="panel span-2">
+    <div class="panel-header">
+      <span class="panel-title">RiskGuard</span>
+      <span class="panel-tag" style="background:rgba(0,200,150,0.15);color:#00c896;">Auto-Fix</span>
+      <button id="rg-resume-all-btn" onclick="resumeAllMarkets()" style="margin-left:auto;padding:2px 10px;font-size:9px;font-family:var(--heading);background:rgba(0,200,150,0.1);border:1px solid rgba(0,200,150,0.3);color:#00c896;border-radius:4px;cursor:pointer;letter-spacing:0.5px;display:none;">RESUME ALL</button>
+    </div>
+    <div class="panel-body">
+      <!-- System KPIs row -->
+      <div class="metrics metrics-3" id="rg-system-metrics" style="margin-bottom:10px;">
+        <div class="metric">
+          <div class="metric-label">Drawdown</div>
+          <div class="metric-value" id="rg-drawdown">$0.00</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">PnL Velocity</div>
+          <div class="metric-value" id="rg-velocity">$0.00/h</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Halted</div>
+          <div class="metric-value" id="rg-halted">0</div>
+        </div>
+      </div>
+      <!-- Per-market risk bars -->
+      <div id="rg-markets-container" style="display:flex;flex-direction:column;gap:6px;">
+        <div class="empty-state" style="font-size:10px;">Waiting for RiskGuard data...</div>
       </div>
     </div>
   </div>
@@ -1807,6 +1869,7 @@ function updateMM(mm) {
     });
   }
   updateInventory(mm.inventory?.positions || {}, tokenNames);
+  updateRiskGuard(mm);
 }
 
 function updateQuotes(quotes) {
@@ -1871,6 +1934,99 @@ function updateInventory(positions, tokenNames) {
       </div>
     `;
   }).join('');
+}
+
+function updateRiskGuard(mm) {
+  const rg = mm?.riskguard;
+  if (!rg) return;
+
+  const sys = rg.system || {};
+  // System metrics
+  const ddEl = document.getElementById('rg-drawdown');
+  ddEl.textContent = '$' + (sys.total_drawdown || 0).toFixed(2);
+  ddEl.className = 'metric-value ' + (sys.total_drawdown > 10 ? 'stat-bad' : sys.total_drawdown > 5 ? 'stat-warn' : 'stat-good');
+
+  const velEl = document.getElementById('rg-velocity');
+  const vel = sys.pnl_velocity_per_hour || 0;
+  velEl.textContent = (vel >= 0 ? '+' : '') + '$' + Math.abs(vel).toFixed(2) + '/h';
+  velEl.className = 'metric-value ' + (vel < -5 ? 'stat-bad' : vel < 0 ? 'stat-warn' : 'stat-good');
+
+  const haltEl = document.getElementById('rg-halted');
+  haltEl.textContent = sys.halted_markets || 0;
+  haltEl.className = 'metric-value ' + (sys.halted_markets > 0 ? 'stat-bad' : 'stat-good');
+
+  // Show resume-all button if any halted
+  document.getElementById('rg-resume-all-btn').style.display = sys.halted_markets > 0 ? 'inline-block' : 'none';
+
+  // Per-market risk bars
+  const container = document.getElementById('rg-markets-container');
+  const markets = rg.markets || {};
+  const tokenNames = mm.token_names || {};
+
+  if (Object.keys(markets).length === 0) {
+    container.innerHTML = '<div class="empty-state" style="font-size:10px;">No active positions to monitor</div>';
+    return;
+  }
+
+  container.innerHTML = Object.entries(markets).map(([tid, mkpi]) => {
+    const ratio = mkpi.effective_ratio || 0;
+    const pct = Math.min(ratio * 100, 100);
+    const action = mkpi.action || 'none';
+    const halted = mkpi.halted;
+
+    // Bar color based on severity
+    let barColor = '#00c896'; // green
+    if (ratio > 0.8) barColor = '#ef476f'; // red
+    else if (ratio > 0.6) barColor = '#ff8c42'; // orange
+    else if (ratio > 0.5) barColor = '#ffb74d'; // amber
+
+    // Market name
+    const info = tokenNames[tid] || {};
+    const name = typeof info === 'object' ? (info.question || tid.slice(0,12)) : (info || tid.slice(0,12));
+    const shortName = smartName(name, 18);
+
+    // Action badge
+    const actionLabels = {
+      none: 'OK', warn: 'WARN', increase_skew: 'SKEW+',
+      fadeout: 'FADE', oneside: '1-SIDE', halt_market: 'HALTED', halt_all: 'HALT ALL'
+    };
+
+    return `
+      <div class="rg-market-row">
+        <span class="rg-market-name" title="${name}">${shortName}</span>
+        <div class="rg-bar-container">
+          <div class="rg-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+          <span class="rg-bar-label">${pct.toFixed(0)}%</span>
+        </div>
+        <span class="rg-action-badge rg-action-${action}">${actionLabels[action] || action}</span>
+        <button class="rg-resume-btn" style="display:${halted ? 'block' : 'none'}" onclick="resumeMarket('${tid}')">Resume</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function resumeMarket(tokenId) {
+  try {
+    const r = await fetch('/api/riskguard/resume', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('pe_token')},
+      body: JSON.stringify({token_id: tokenId})
+    });
+    if (r.ok) showToast('Market resumed', 'success');
+    else showToast('Failed to resume', 'error');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function resumeAllMarkets() {
+  try {
+    const r = await fetch('/api/riskguard/resume', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('pe_token')},
+      body: JSON.stringify({})
+    });
+    if (r.ok) showToast('All markets resumed', 'success');
+    else showToast('Failed to resume', 'error');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 function updateSniper(sn) {

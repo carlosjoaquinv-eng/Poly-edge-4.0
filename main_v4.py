@@ -1014,6 +1014,8 @@ class DashboardAPI:
         app.router.add_get("/api/clean_positions", self._handle_clean_positions)
         app.router.add_post("/api/meta/run", self._handle_meta_run)
         app.router.add_post("/api/mode", self._handle_mode_toggle)
+        app.router.add_get("/api/riskguard", self._handle_riskguard)
+        app.router.add_post("/api/riskguard/resume", self._handle_riskguard_resume)
         app.router.add_get("/health", self._handle_health)
         
         # Serve dashboard HTML at root
@@ -1095,6 +1097,28 @@ class DashboardAPI:
                 },
             }
         })
+
+    async def _handle_riskguard(self, request):
+        from aiohttp import web
+        if not self.mm:
+            return web.json_response({"error": "MM not available"}, status=503)
+        return web.json_response(self.mm.riskguard.get_stats())
+
+    async def _handle_riskguard_resume(self, request):
+        from aiohttp import web
+        if not self.mm:
+            return web.json_response({"error": "MM not available"}, status=503)
+        try:
+            body = await request.json()
+            token_id = body.get("token_id")
+            if token_id:
+                self.mm.riskguard.resume_market(token_id)
+                return web.json_response({"status": "ok", "resumed": token_id})
+            else:
+                self.mm.riskguard.resume_all()
+                return web.json_response({"status": "ok", "resumed": "all"})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
 
     async def _handle_trades(self, request):
         from aiohttp import web

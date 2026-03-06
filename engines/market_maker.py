@@ -156,6 +156,23 @@ class MMConfig:
     time_jitter_secs: float = 3.0       # ±3s random timing variation
     price_jitter_cents: float = 0.002   # ±0.2¢ random price variation
 
+    # ── RiskGuard: KPI thresholds & auto-fix parameters ──
+    max_units_per_market: float = 200.0         # Hard cap on contract UNITS (not $)
+    inventory_warn_pct: float = 0.50            # 50% inventory → warning
+    inventory_fadeout_pct: float = 0.60         # 60% → start reducing quote size
+    inventory_oneside_pct: float = 0.80         # 80% → only quote reducing side
+    inventory_halt_pct: float = 0.95            # 95% → stop quoting this market
+    adaptive_skew_threshold: float = 0.50       # 50% inventory → increase skew
+    adaptive_skew_multiplier: float = 3.0       # Skew factor multiplier at max inventory
+    fill_asymmetry_window: int = 20             # Last N fills to check asymmetry
+    fill_asymmetry_threshold: float = 0.75      # >75% one-sided fills → trigger
+    max_drawdown_per_market: float = 20.0       # $20 drawdown → auto-pause market
+    max_drawdown_total: float = 40.0            # $40 total drawdown → reduce all
+    pnl_velocity_window_secs: float = 1800.0    # 30min window for PnL velocity
+    pnl_velocity_alert: float = -10.0           # -$10/30min → alert
+    riskguard_check_interval: float = 30.0      # Check KPIs every 30s
+    riskguard_telegram_cooldown: float = 300.0  # 5min between repeated alerts
+
 
 # ─────────────────────────────────────────────
 # OU Calibrator
@@ -409,57 +426,89 @@ class InventoryManager:
         """Check if a buy would violate inventory limits."""
         pos = self.get_position(token_id)
         new_position = pos.net_position + size
-        
-        # Check absolute notional at avg entry (accumulated cost basis)
-        new_notional = abs(new_position) * max(pos.avg_entry, price)
+
+        # ── HARD UNIT CAP (RiskGuard fix #1) ──
+        # Prevents accumulating 400+ contracts on cheap tokens
+        if abs(new_position) > self.config.max_units_per_market:
+            logger.debug(f"⛔ BUY blocked: {abs(new_position):.0f} units > {self.config.max_units_per_market:.0f} cap")
+            return False
+
+        # Check notional at CURRENT price (not avg_entry — prevents the OKC bug)
+        new_notional = abs(new_position) * price
         if new_notional > self.config.max_position_per_market:
             return False
-        
-        # Also hard-cap on raw units to prevent runaway accumulation
-        if abs(new_position) * price > self.config.max_position_per_market:
-            return False
-        
+
+        # Also check at avg_entry for cost-basis limit
+        if pos.avg_entry > 0:
+            cost_notional = abs(new_position) * pos.avg_entry
+            if cost_notional > self.config.max_position_per_market * 1.5:
+                return False
+
         if self.total_exposure + (size * price) > self.config.max_total_inventory:
             return False
-        
+
         return True
-    
+
     def can_sell(self, token_id: str, size: float, price: float) -> bool:
         """Check if a sell would violate limits."""
         pos = self.get_position(token_id)
         new_position = pos.net_position - size
-        
-        # Check absolute notional at avg entry
-        new_notional = abs(new_position) * max(pos.avg_entry, price)
+
+        # ── HARD UNIT CAP (RiskGuard fix #1) ──
+        if abs(new_position) > self.config.max_units_per_market:
+            logger.debug(f"⛔ SELL blocked: {abs(new_position):.0f} units > {self.config.max_units_per_market:.0f} cap")
+            return False
+
+        # Notional at current price
+        new_notional = abs(new_position) * price
         if new_notional > self.config.max_position_per_market:
             return False
-        
-        # Hard-cap on raw units
-        if abs(new_position) * price > self.config.max_position_per_market:
-            return False
-        
+
+        # Cost-basis limit
+        if pos.avg_entry > 0:
+            cost_notional = abs(new_position) * pos.avg_entry
+            if cost_notional > self.config.max_position_per_market * 1.5:
+                return False
+
         return True
     
-    def compute_skew(self, token_id: str) -> float:
+    def compute_skew(self, token_id: str, skew_boost: float = 1.0) -> float:
         """
-        Compute quote skew based on inventory.
-        
+        Compute quote skew based on inventory + RiskGuard boost.
+
         Returns adjustment in cents:
           - Positive = shift quotes UP (want to sell, make ask more attractive)
           - Negative = shift quotes DOWN (want to buy, make bid more attractive)
           - Zero = balanced inventory, symmetric quotes
-        
-        Skew formula: skew = -inventory_ratio * skew_factor * half_spread
+
+        Skew formula: skew = -inventory_ratio * skew_factor * half_spread * skew_boost
+
+        The skew_boost parameter comes from RiskGuard — it escalates from 1.0
+        (normal) up to 3.0x when inventory gets dangerously high.
         """
         pos = self.get_position(token_id)
-        max_pos = self.config.max_position_per_market
-        
-        if max_pos == 0:
+
+        # Use UNIT-BASED ratio for skew (not notional)
+        # This makes skew respond to actual contract count, not dollar value
+        max_units = self.config.max_units_per_market
+        max_notional = self.config.max_position_per_market
+
+        if max_units == 0 and max_notional == 0:
             return 0.0
-        
-        inventory_ratio = pos.net_position / max_pos  # -1 to +1
-        skew = -inventory_ratio * self.config.inventory_skew_factor * self.config.target_half_spread
-        
+
+        # Use higher of unit ratio or notional ratio
+        unit_ratio = pos.net_position / max(max_units, 1) if max_units > 0 else 0
+        notional_ratio = (pos.net_position * max(pos.avg_entry, 0.01)) / max(max_notional, 1)
+        # Use sign from unit_ratio (preserves direction), magnitude from max
+        if abs(unit_ratio) > abs(notional_ratio):
+            inventory_ratio = unit_ratio
+        else:
+            inventory_ratio = notional_ratio
+
+        # Apply base skew + RiskGuard boost
+        effective_skew_factor = self.config.inventory_skew_factor * skew_boost
+        skew = -inventory_ratio * effective_skew_factor * self.config.target_half_spread
+
         return skew
     
     @property
@@ -557,6 +606,380 @@ class InventoryManager:
         self._daily_pnl = state.get("daily_pnl", 0.0)
         self._daily_pnl_reset = state.get("daily_pnl_reset", 0.0)
         logger.info(f"Restored {len(self._positions)} positions from state")
+
+
+# ─────────────────────────────────────────────
+# RiskGuard — KPI Monitor + Auto-Fix System
+# ─────────────────────────────────────────────
+
+class RiskAction(Enum):
+    """Actions the RiskGuard can take."""
+    NONE = "none"
+    WARN = "warn"                      # Log warning, Telegram alert
+    INCREASE_SKEW = "increase_skew"    # Boost skew to reduce inventory faster
+    FADEOUT = "fadeout"                 # Reduce quote sizes proportionally
+    ONESIDE = "oneside"                # Only quote the reducing side
+    HALT_MARKET = "halt_market"        # Stop quoting a specific market
+    HALT_ALL = "halt_all"              # Emergency stop all quoting
+    REDUCE_SIZE = "reduce_size"        # Reduce max quote size across the board
+
+@dataclass
+class MarketKPI:
+    """KPIs tracked per market."""
+    token_id: str
+    inventory_ratio: float = 0.0        # -1.0 to 1.0 (position / max)
+    units_ratio: float = 0.0            # abs(units) / max_units
+    fill_asymmetry: float = 0.0         # 0.0 = balanced, 1.0 = all one-sided
+    fill_bias: str = ""                 # "BUY" or "SELL" — dominant fill side
+    unrealized_pnl: float = 0.0
+    realized_pnl: float = 0.0
+    drawdown: float = 0.0              # $ drawdown from peak
+    peak_pnl: float = 0.0              # Peak PnL (for drawdown calc)
+    spread_capture_rate: float = 0.0   # Realized spread / theoretical spread
+    active_action: RiskAction = RiskAction.NONE
+    fadeout_factor: float = 1.0        # 1.0 = full size, 0.0 = no quoting
+    skew_boost: float = 1.0            # Multiplier on skew_factor
+    last_alert_time: float = 0.0       # Throttle alerts
+
+@dataclass
+class SystemKPI:
+    """System-wide KPIs."""
+    total_exposure: float = 0.0
+    total_realized_pnl: float = 0.0
+    total_unrealized_pnl: float = 0.0
+    total_drawdown: float = 0.0
+    peak_total_pnl: float = 0.0
+    pnl_velocity: float = 0.0          # $/min rate of PnL change
+    active_markets: int = 0
+    halted_markets: int = 0
+    markets_at_warn: int = 0
+    markets_at_fadeout: int = 0
+    markets_at_oneside: int = 0
+
+
+class RiskGuard:
+    """
+    KPI monitoring + automatic risk correction for the Market Maker.
+
+    Monitors:
+      1. Inventory ratio per market (units + notional)
+      2. Fill asymmetry (detects one-sided accumulation)
+      3. Drawdown per market and total
+      4. PnL velocity (rate of change)
+      5. Spread capture efficiency
+
+    Auto-fixes (escalating severity):
+      Level 1 (WARN):       inventory > 50%  → Telegram alert, log warning
+      Level 2 (SKEW BOOST): inventory > 50%  → increase skew factor 1x→3x
+      Level 3 (FADEOUT):    inventory > 60%  → reduce quote size proportionally
+      Level 4 (ONESIDE):    inventory > 80%  → only quote the reducing side
+      Level 5 (HALT):       inventory > 95% or drawdown > $20 → stop quoting market
+      Level 6 (HALT ALL):   total drawdown > $40 → emergency stop
+    """
+
+    def __init__(self, config: MMConfig, inventory: InventoryManager, telegram=None):
+        self.config = config
+        self.inventory = inventory
+        self.telegram = telegram
+
+        self._market_kpis: Dict[str, MarketKPI] = {}
+        self._system_kpi = SystemKPI()
+        self._fill_history: Dict[str, List[Dict]] = defaultdict(list)  # token → recent fills
+        self._pnl_history: List[Tuple[float, float]] = []  # (timestamp, total_pnl)
+        self._halted_markets: set = set()
+        self._alert_cooldowns: Dict[str, float] = {}  # "alert_key" → last_sent_time
+
+        logger.info("🛡️ RiskGuard initialized")
+
+    def record_fill(self, token_id: str, side: str, price: float, size: float):
+        """Record a fill for asymmetry tracking."""
+        self._fill_history[token_id].append({
+            "time": time.time(),
+            "side": side,
+            "price": price,
+            "size": size,
+        })
+        # Keep only recent fills
+        window = self.config.fill_asymmetry_window * 2
+        if len(self._fill_history[token_id]) > window:
+            self._fill_history[token_id] = self._fill_history[token_id][-window:]
+
+    def get_market_kpi(self, token_id: str) -> MarketKPI:
+        """Get or create KPI tracker for a market."""
+        if token_id not in self._market_kpis:
+            self._market_kpis[token_id] = MarketKPI(token_id=token_id)
+        return self._market_kpis[token_id]
+
+    def is_halted(self, token_id: str) -> bool:
+        """Check if a market is halted by RiskGuard."""
+        return token_id in self._halted_markets
+
+    def resume_market(self, token_id: str):
+        """Manually resume a halted market."""
+        self._halted_markets.discard(token_id)
+        kpi = self.get_market_kpi(token_id)
+        kpi.active_action = RiskAction.NONE
+        kpi.fadeout_factor = 1.0
+        kpi.skew_boost = 1.0
+        logger.info(f"🛡️ Market resumed: {token_id[:12]}...")
+
+    def resume_all(self):
+        """Resume all halted markets."""
+        self._halted_markets.clear()
+        for kpi in self._market_kpis.values():
+            kpi.active_action = RiskAction.NONE
+            kpi.fadeout_factor = 1.0
+            kpi.skew_boost = 1.0
+        logger.info("🛡️ All markets resumed")
+
+    async def evaluate(self) -> Dict[str, RiskAction]:
+        """
+        Run full KPI evaluation and return actions per market.
+
+        Called every riskguard_check_interval seconds from the engine.
+        Returns: {token_id: RiskAction}
+        """
+        actions = {}
+        now = time.time()
+
+        # ── Per-market KPIs ──
+        for token_id, pos in self.inventory._positions.items():
+            if abs(pos.net_position) < 0.01 and pos.n_trades == 0:
+                continue
+
+            kpi = self.get_market_kpi(token_id)
+
+            # 1. Inventory ratio (by units)
+            max_units = self.config.max_units_per_market
+            kpi.units_ratio = abs(pos.net_position) / max(max_units, 1)
+
+            # 2. Inventory ratio (by notional)
+            max_notional = self.config.max_position_per_market
+            notional = abs(pos.net_position) * max(pos.avg_entry, 0.01)
+            kpi.inventory_ratio = notional / max(max_notional, 1)
+
+            # Use the HIGHER of unit ratio or notional ratio for risk decisions
+            effective_ratio = max(kpi.units_ratio, kpi.inventory_ratio)
+
+            # 3. PnL tracking
+            kpi.realized_pnl = pos.realized_pnl
+            kpi.unrealized_pnl = pos.unrealized_pnl
+            total_pnl = pos.realized_pnl + pos.unrealized_pnl
+
+            # 4. Drawdown tracking
+            if total_pnl > kpi.peak_pnl:
+                kpi.peak_pnl = total_pnl
+            kpi.drawdown = kpi.peak_pnl - total_pnl
+
+            # 5. Fill asymmetry
+            recent_fills = self._fill_history.get(token_id, [])[-self.config.fill_asymmetry_window:]
+            if len(recent_fills) >= 4:
+                buys = sum(1 for f in recent_fills if f["side"] == "BUY")
+                sells = len(recent_fills) - buys
+                total = len(recent_fills)
+                majority = max(buys, sells)
+                kpi.fill_asymmetry = majority / total
+                kpi.fill_bias = "BUY" if buys > sells else "SELL"
+
+            # ── Determine action (escalating severity) ──
+            action = RiskAction.NONE
+
+            # Level 5: HALT — drawdown or extreme inventory
+            if kpi.drawdown > self.config.max_drawdown_per_market:
+                action = RiskAction.HALT_MARKET
+                self._halted_markets.add(token_id)
+                await self._alert(
+                    f"halt_{token_id}",
+                    f"🛑 <b>MARKET HALTED</b>: {token_id[:16]}...\n"
+                    f"Drawdown: ${kpi.drawdown:.2f} > ${self.config.max_drawdown_per_market}\n"
+                    f"Position: {pos.net_position:.0f} units @ {pos.avg_entry:.4f}\n"
+                    f"uPnL: ${kpi.unrealized_pnl:.2f}"
+                )
+            elif effective_ratio >= self.config.inventory_halt_pct:
+                action = RiskAction.HALT_MARKET
+                self._halted_markets.add(token_id)
+                await self._alert(
+                    f"halt_{token_id}",
+                    f"🛑 <b>MARKET HALTED</b>: {token_id[:16]}...\n"
+                    f"Inventory: {effective_ratio:.0%} of limit\n"
+                    f"Units: {pos.net_position:.0f} / {max_units:.0f}"
+                )
+            # Level 4: ONE-SIDED quoting
+            elif effective_ratio >= self.config.inventory_oneside_pct:
+                action = RiskAction.ONESIDE
+                kpi.fadeout_factor = 0.3  # Very small size on reducing side
+                kpi.skew_boost = self.config.adaptive_skew_multiplier
+                await self._alert(
+                    f"oneside_{token_id}",
+                    f"⚠️ <b>ONE-SIDED MODE</b>: {token_id[:16]}...\n"
+                    f"Inventory: {effective_ratio:.0%} — only quoting reducing side\n"
+                    f"Units: {pos.net_position:.0f}"
+                )
+            # Level 3: FADEOUT
+            elif effective_ratio >= self.config.inventory_fadeout_pct:
+                action = RiskAction.FADEOUT
+                # Linear fadeout: at 60% → factor=1.0, at 80% → factor=0.3
+                fadeout_range = self.config.inventory_oneside_pct - self.config.inventory_fadeout_pct
+                if fadeout_range > 0:
+                    progress = (effective_ratio - self.config.inventory_fadeout_pct) / fadeout_range
+                    kpi.fadeout_factor = max(0.3, 1.0 - progress * 0.7)
+                else:
+                    kpi.fadeout_factor = 0.5
+                kpi.skew_boost = 1.0 + (self.config.adaptive_skew_multiplier - 1.0) * progress
+            # Level 2: SKEW BOOST
+            elif effective_ratio >= self.config.adaptive_skew_threshold:
+                action = RiskAction.INCREASE_SKEW
+                # Linear skew boost: at 50% → 1x, at 60% → adaptive_skew_multiplier
+                skew_range = self.config.inventory_fadeout_pct - self.config.adaptive_skew_threshold
+                if skew_range > 0:
+                    progress = (effective_ratio - self.config.adaptive_skew_threshold) / skew_range
+                    kpi.skew_boost = 1.0 + (self.config.adaptive_skew_multiplier - 1.0) * progress
+                else:
+                    kpi.skew_boost = self.config.adaptive_skew_multiplier
+                kpi.fadeout_factor = 1.0  # No size reduction yet
+                await self._alert(
+                    f"skew_{token_id}",
+                    f"📊 <b>SKEW BOOST</b>: {token_id[:16]}...\n"
+                    f"Inventory: {effective_ratio:.0%} → skew ×{kpi.skew_boost:.1f}\n"
+                    f"Units: {pos.net_position:.0f}"
+                )
+            # Level 1: WARN on fill asymmetry
+            elif kpi.fill_asymmetry > self.config.fill_asymmetry_threshold and len(recent_fills) >= 6:
+                action = RiskAction.WARN
+                kpi.skew_boost = 1.5  # Mild skew boost on asymmetry
+                await self._alert(
+                    f"asymmetry_{token_id}",
+                    f"⚡ <b>FILL ASYMMETRY</b>: {token_id[:16]}...\n"
+                    f"{kpi.fill_bias} bias: {kpi.fill_asymmetry:.0%} of last {len(recent_fills)} fills\n"
+                    f"Applying 1.5x skew boost"
+                )
+            else:
+                # All clear — reset corrections
+                kpi.fadeout_factor = 1.0
+                kpi.skew_boost = 1.0
+
+            kpi.active_action = action
+            actions[token_id] = action
+
+        # ── System-wide KPIs ──
+        total_rpnl = self.inventory.total_realized_pnl
+        total_upnl = self.inventory.total_unrealized_pnl
+        total_pnl = total_rpnl + total_upnl
+
+        self._system_kpi.total_exposure = self.inventory.total_exposure
+        self._system_kpi.total_realized_pnl = total_rpnl
+        self._system_kpi.total_unrealized_pnl = total_upnl
+        self._system_kpi.active_markets = len([
+            p for p in self.inventory._positions.values() if abs(p.net_position) > 0.01
+        ])
+        self._system_kpi.halted_markets = len(self._halted_markets)
+        self._system_kpi.markets_at_warn = len([
+            a for a in actions.values() if a == RiskAction.WARN
+        ])
+        self._system_kpi.markets_at_fadeout = len([
+            a for a in actions.values() if a in (RiskAction.FADEOUT, RiskAction.ONESIDE)
+        ])
+
+        # Total drawdown
+        if total_pnl > self._system_kpi.peak_total_pnl:
+            self._system_kpi.peak_total_pnl = total_pnl
+        self._system_kpi.total_drawdown = self._system_kpi.peak_total_pnl - total_pnl
+
+        # PnL velocity ($ per minute over last N minutes)
+        self._pnl_history.append((now, total_pnl))
+        cutoff = now - self.config.pnl_velocity_window_secs
+        self._pnl_history = [(t, p) for t, p in self._pnl_history if t >= cutoff]
+        if len(self._pnl_history) >= 2:
+            dt_mins = (self._pnl_history[-1][0] - self._pnl_history[0][0]) / 60
+            dpnl = self._pnl_history[-1][1] - self._pnl_history[0][1]
+            self._system_kpi.pnl_velocity = dpnl / max(dt_mins, 0.1)
+
+        # System-level alerts
+        if self._system_kpi.total_drawdown > self.config.max_drawdown_total:
+            await self._alert(
+                "system_drawdown",
+                f"🚨 <b>SYSTEM DRAWDOWN ALERT</b>\n"
+                f"Total drawdown: ${self._system_kpi.total_drawdown:.2f} > ${self.config.max_drawdown_total}\n"
+                f"Halting ALL markets\n"
+                f"rPnL: ${total_rpnl:.2f} | uPnL: ${total_upnl:.2f}"
+            )
+            # Halt everything
+            for token_id in self.inventory._positions:
+                self._halted_markets.add(token_id)
+                actions[token_id] = RiskAction.HALT_ALL
+
+        if self._system_kpi.pnl_velocity < self.config.pnl_velocity_alert:
+            await self._alert(
+                "pnl_velocity",
+                f"📉 <b>PnL VELOCITY ALERT</b>\n"
+                f"Losing ${abs(self._system_kpi.pnl_velocity):.2f}/min over last "
+                f"{self.config.pnl_velocity_window_secs/60:.0f} min\n"
+                f"Total PnL: ${total_pnl:.2f}"
+            )
+
+        return actions
+
+    async def _alert(self, key: str, message: str):
+        """Send throttled Telegram alert."""
+        now = time.time()
+        last = self._alert_cooldowns.get(key, 0)
+        if now - last < self.config.riskguard_telegram_cooldown:
+            return
+
+        self._alert_cooldowns[key] = now
+        logger.warning(f"RiskGuard: {message}")
+
+        if self.telegram:
+            try:
+                await self.telegram.send(f"🛡️ RiskGuard\n{message}")
+            except Exception as e:
+                logger.error(f"RiskGuard Telegram alert failed: {e}")
+
+    def get_stats(self) -> Dict:
+        """Full RiskGuard status for dashboard."""
+        return {
+            "system": {
+                "total_exposure": round(self._system_kpi.total_exposure, 2),
+                "total_rpnl": round(self._system_kpi.total_realized_pnl, 2),
+                "total_upnl": round(self._system_kpi.total_unrealized_pnl, 2),
+                "total_drawdown": round(self._system_kpi.total_drawdown, 2),
+                "peak_pnl": round(self._system_kpi.peak_total_pnl, 2),
+                "pnl_velocity": round(self._system_kpi.pnl_velocity, 4),
+                "pnl_velocity_per_hour": round(self._system_kpi.pnl_velocity * 60, 2),
+                "active_markets": self._system_kpi.active_markets,
+                "halted_markets": self._system_kpi.halted_markets,
+                "markets_at_warn": self._system_kpi.markets_at_warn,
+                "markets_at_fadeout": self._system_kpi.markets_at_fadeout,
+            },
+            "markets": {
+                tid: {
+                    "inventory_ratio": round(kpi.inventory_ratio, 3),
+                    "units_ratio": round(kpi.units_ratio, 3),
+                    "effective_ratio": round(max(kpi.inventory_ratio, kpi.units_ratio), 3),
+                    "fill_asymmetry": round(kpi.fill_asymmetry, 2),
+                    "fill_bias": kpi.fill_bias,
+                    "drawdown": round(kpi.drawdown, 2),
+                    "peak_pnl": round(kpi.peak_pnl, 2),
+                    "rpnl": round(kpi.realized_pnl, 2),
+                    "upnl": round(kpi.unrealized_pnl, 2),
+                    "action": kpi.active_action.value,
+                    "fadeout_factor": round(kpi.fadeout_factor, 2),
+                    "skew_boost": round(kpi.skew_boost, 1),
+                    "halted": tid in self._halted_markets,
+                }
+                for tid, kpi in self._market_kpis.items()
+            },
+            "halted_market_ids": list(self._halted_markets),
+            "config": {
+                "max_units_per_market": self.config.max_units_per_market,
+                "inventory_warn_pct": self.config.inventory_warn_pct,
+                "inventory_fadeout_pct": self.config.inventory_fadeout_pct,
+                "inventory_oneside_pct": self.config.inventory_oneside_pct,
+                "inventory_halt_pct": self.config.inventory_halt_pct,
+                "max_drawdown_per_market": self.config.max_drawdown_per_market,
+                "max_drawdown_total": self.config.max_drawdown_total,
+            }
+        }
 
 
 # ─────────────────────────────────────────────
@@ -666,26 +1089,44 @@ class QuoteGenerator:
         self.inventory = inventory
         self.hmm = hmm
     
-    def generate_quotes(self, token_id: str, current_mid: float) -> QuotePair:
+    def generate_quotes(self, token_id: str, current_mid: float,
+                         riskguard: 'RiskGuard' = None) -> QuotePair:
         """
         Generate a bid/ask quote pair.
-        
+
         Fair value comes from OU model (if calibrated) or market mid.
         Quotes are skewed by inventory to reduce directional exposure.
         Random jitter added for stealth.
+
+        RiskGuard integration:
+          - Applies skew_boost (increased inventory pressure)
+          - Applies fadeout_factor (reduced quote size)
+          - Enforces one-sided quoting when inventory critical
+          - Returns empty pair if market is halted
         """
+        # ── RiskGuard: Check if market is halted ──
+        if riskguard and riskguard.is_halted(token_id):
+            return QuotePair(token_id=token_id, condition_id="",
+                             fair_value=current_mid, last_update=time.time())
+
+        # Get RiskGuard adjustments
+        rg_kpi = riskguard.get_market_kpi(token_id) if riskguard else None
+        skew_boost = rg_kpi.skew_boost if rg_kpi else 1.0
+        fadeout_factor = rg_kpi.fadeout_factor if rg_kpi else 1.0
+        rg_action = rg_kpi.active_action if rg_kpi else RiskAction.NONE
+
         # 1. Fair value estimation
         # Use OU fair value only if well-calibrated (enough observations)
         ou_fair = self.ou.get_fair_value(token_id)
         ou_params = self.ou._params.get(token_id)
         ou_is_calibrated = ou_params and ou_params.n_obs >= self.ou.config.ou_min_observations
-        
+
         if ou_is_calibrated and ou_fair is not None:
             fair_value = ou_fair
         else:
             # Not enough data — trust the market mid
             fair_value = current_mid
-        
+
         # 2. Dynamic half-spread from OU calibration
         #    Stationary std of OU process: sigma / sqrt(2*theta)
         #    Tighter spreads for fast mean-reverting markets, wider for volatile ones
@@ -702,14 +1143,14 @@ class QuoteGenerator:
             )
         else:
             half_spread = self.config.target_half_spread
-        
+
         # HMM regime: scale spread
         if self.hmm:
             half_spread *= self.hmm.get_spread_multiplier(token_id)
-        
-        # 3. Inventory skew
-        skew = self.inventory.compute_skew(token_id)
-        
+
+        # 3. Inventory skew (with RiskGuard boost)
+        skew = self.inventory.compute_skew(token_id, skew_boost=skew_boost)
+
         # 4. OU deviation adjustment
         # If price is far from fair value, widen spread on the "wrong" side
         deviation = self.ou.get_deviation(token_id, current_mid)
@@ -717,7 +1158,7 @@ class QuoteGenerator:
         if deviation is not None and abs(deviation) > 1.5:
             # Price is 1.5σ+ from fair value — widen the side towards mispricing
             ou_adjustment = max(0, (abs(deviation) - 1.5)) * 0.005
-        
+
         # 5. Stealth jitter
         price_jitter = random.uniform(
             -self.config.price_jitter_cents,
@@ -727,52 +1168,72 @@ class QuoteGenerator:
             -self.config.size_jitter_pct,
             self.config.size_jitter_pct
         )
-        
+
         # 6. Compute prices
         bid_price = fair_value - half_spread + skew + price_jitter
         ask_price = fair_value + half_spread + skew + price_jitter
-        
+
         # If OU says price is too high, widen the bid (less aggressive buying)
         if deviation and deviation > 1.5:
             bid_price -= ou_adjustment
         elif deviation and deviation < -1.5:
             ask_price += ou_adjustment
-        
+
         # Clamp to valid range
         bid_price = max(0.01, min(0.98, round(bid_price, 3)))
         ask_price = max(0.02, min(0.99, round(ask_price, 3)))
-        
+
         # Ensure bid < ask (minimum 1¢ spread)
         if bid_price >= ask_price:
             mid = (bid_price + ask_price) / 2
             bid_price = round(mid - 0.005, 3)
             ask_price = round(mid + 0.005, 3)
-        
-        # 7. Size with Kelly and jitter
+
+        # 7. Size with Kelly and jitter, THEN apply fadeout
         base_size = self._kelly_size(token_id, fair_value, bid_price, ask_price)
-        size = round(base_size * size_jitter_mult, 1)
+        size = round(base_size * size_jitter_mult * fadeout_factor, 1)
         size = max(self.config.min_quote_size, min(self.config.max_quote_size, size))
-        
-        # 8. Check inventory limits
+
+        # If fadeout makes size too small, don't quote
+        if fadeout_factor < 0.3 and size <= self.config.min_quote_size:
+            return QuotePair(token_id=token_id, condition_id="",
+                             fair_value=fair_value, last_update=time.time())
+
+        # 8. Check inventory limits + RiskGuard one-sided enforcement
         bid_quote = None
         ask_quote = None
-        
-        if self.inventory.can_buy(token_id, size, bid_price):
-            bid_quote = Quote(
-                token_id=token_id,
-                side=QuoteSide.BID,
-                price=bid_price,
-                size=size,
-            )
-        
-        if self.inventory.can_sell(token_id, size, ask_price):
-            ask_quote = Quote(
-                token_id=token_id,
-                side=QuoteSide.ASK,
-                price=ask_price,
-                size=size,
-            )
-        
+
+        pos = self.inventory.get_position(token_id)
+
+        # ── RiskGuard: ONE-SIDED mode ──
+        # Only quote the side that REDUCES inventory
+        if rg_action == RiskAction.ONESIDE:
+            if pos.net_position > 0:
+                # Long → only quote ASK (selling reduces inventory)
+                if self.inventory.can_sell(token_id, size, ask_price):
+                    ask_quote = Quote(token_id=token_id, side=QuoteSide.ASK,
+                                     price=ask_price, size=size)
+                logger.debug(f"🛡️ ONE-SIDED: long {pos.net_position:.0f} → ASK only")
+            elif pos.net_position < 0:
+                # Short → only quote BID (buying reduces inventory)
+                if self.inventory.can_buy(token_id, size, bid_price):
+                    bid_quote = Quote(token_id=token_id, side=QuoteSide.BID,
+                                     price=bid_price, size=size)
+                logger.debug(f"🛡️ ONE-SIDED: short {pos.net_position:.0f} → BID only")
+        else:
+            # Normal two-sided quoting
+            if self.inventory.can_buy(token_id, size, bid_price):
+                bid_quote = Quote(
+                    token_id=token_id, side=QuoteSide.BID,
+                    price=bid_price, size=size,
+                )
+
+            if self.inventory.can_sell(token_id, size, ask_price):
+                ask_quote = Quote(
+                    token_id=token_id, side=QuoteSide.ASK,
+                    price=ask_price, size=size,
+                )
+
         pair = QuotePair(
             token_id=token_id,
             condition_id="",  # Set by caller
@@ -781,7 +1242,7 @@ class QuoteGenerator:
             fair_value=fair_value,
             last_update=time.time(),
         )
-        
+
         return pair
     
     def _kelly_size(self, token_id: str, fair_value: float, 
@@ -849,7 +1310,8 @@ class MarketMakerEngine:
         self.inventory = InventoryManager(config)
         self.spread_analyzer = SpreadAnalyzer(config)
         self.quote_gen = QuoteGenerator(config, self.ou, self.inventory, self.hmm)
-        
+        self.riskguard = RiskGuard(config, self.inventory, telegram)
+
         # State
         self._active_markets: List[MarketInfo] = []
         self._active_quotes: Dict[str, QuotePair] = {}  # token_id → QuotePair
@@ -883,12 +1345,13 @@ class MarketMakerEngine:
                 f"Max exposure: ${self.config.max_total_inventory}"
             )
         
-        # Run main loops
+        # Run main loops (including RiskGuard)
         await asyncio.gather(
             self._market_scan_loop(),
             self._quote_loop(),
             self._monitor_loop(),
             self._calibration_loop(),
+            self._riskguard_loop(),
         )
     
     async def stop(self):
@@ -1077,8 +1540,8 @@ class MarketMakerEngine:
         self.ou.record_price(token_id, mid)
         self.hmm.record_price(token_id, mid)
         
-        # Generate new quotes
-        pair = self.quote_gen.generate_quotes(token_id, mid)
+        # Generate new quotes (with RiskGuard integration)
+        pair = self.quote_gen.generate_quotes(token_id, mid, riskguard=self.riskguard)
         pair.condition_id = market.condition_id
         
         if self._paper_mode:
@@ -1169,6 +1632,7 @@ class MarketMakerEngine:
                 self.inventory.record_fill(
                     token_id, "BUY", pair.bid.price, pair.bid.size
                 )
+                self.riskguard.record_fill(token_id, "BUY", pair.bid.price, pair.bid.size)
                 self._fill_count += 1
                 self._total_spread_captured += pair.fair_value - pair.bid.price
                 self._paper_fills.append({
@@ -1181,7 +1645,7 @@ class MarketMakerEngine:
                 logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%}, dist={bid_distance:.4f})")
             else:
                 logger.debug(f"⛔ BUY fill blocked by inventory limit on {token_id[:8]}")
-        
+
         # ASK side: fills when buyers come up to our level
         ask_distance = abs(pair.ask.price - market_bid)
         if market_bid >= pair.ask.price:
@@ -1192,13 +1656,14 @@ class MarketMakerEngine:
             fill_prob = 0.02  # Within 2¢
         else:
             fill_prob = 0.0
-        
+
         # Re-check inventory before filling
         if fill_prob > 0 and random.random() < fill_prob:
             if self.inventory.can_sell(token_id, pair.ask.size, pair.ask.price):
                 self.inventory.record_fill(
                     token_id, "SELL", pair.ask.price, pair.ask.size
                 )
+                self.riskguard.record_fill(token_id, "SELL", pair.ask.price, pair.ask.size)
                 self._fill_count += 1
                 self._total_spread_captured += pair.ask.price - pair.fair_value
                 self._paper_fills.append({
@@ -1242,14 +1707,16 @@ class MarketMakerEngine:
                                 self.inventory.record_fill(
                                     token_id, "BUY", pair.bid.price, pair.bid.size
                                 )
+                                self.riskguard.record_fill(token_id, "BUY", pair.bid.price, pair.bid.size)
                                 self._fill_count += 1
                                 pair.bid = None
-                        
+
                         if pair.ask and pair.ask.order_id:
                             if not any(o.get("id") == pair.ask.order_id for o in open_orders):
                                 self.inventory.record_fill(
                                     token_id, "SELL", pair.ask.price, pair.ask.size
                                 )
+                                self.riskguard.record_fill(token_id, "SELL", pair.ask.price, pair.ask.size)
                                 self._fill_count += 1
                                 self._total_spread_captured += pair.ask.price - pair.fair_value
                                 pair.ask = None
@@ -1271,7 +1738,30 @@ class MarketMakerEngine:
             
             await asyncio.sleep(10)
     
-    # ── Loop 4: OU Recalibration (every 5 min) ──
+    # ── Loop 4: RiskGuard KPI Evaluation (every 30s) ──
+
+    async def _riskguard_loop(self):
+        """Periodically evaluate KPIs and apply auto-fixes."""
+        await asyncio.sleep(25)  # Wait for initial data
+
+        while self._running:
+            try:
+                actions = await self.riskguard.evaluate()
+
+                # Log summary periodically
+                halted = len(self.riskguard._halted_markets)
+                active_actions = {k: v.value for k, v in actions.items() if v != RiskAction.NONE}
+                if active_actions:
+                    logger.info(
+                        f"🛡️ RiskGuard: {len(active_actions)} actions active, "
+                        f"{halted} halted | {active_actions}"
+                    )
+            except Exception as e:
+                logger.error(f"RiskGuard loop error: {e}", exc_info=True)
+
+            await asyncio.sleep(self.config.riskguard_check_interval)
+
+    # ── Loop 5: OU Recalibration (every 5 min) ──
     
     async def _calibration_loop(self):
         """Periodically recalibrate OU parameters."""
@@ -1360,6 +1850,7 @@ class MarketMakerEngine:
             },
             "kill_switch": self.inventory.check_kill_switch(),
             "recent_paper_fills": self._paper_fills[-20:] if self._paper_mode else [],
+            "riskguard": self.riskguard.get_stats(),
         }
     
     def save_state(self) -> Dict:
