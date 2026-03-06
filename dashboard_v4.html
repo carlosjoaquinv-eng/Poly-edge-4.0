@@ -1844,12 +1844,14 @@ function updateInventory(positions, tokenNames) {
   const maxPos = 50;
   panel.innerHTML = Object.entries(positions).map(([market, pos]) => {
     const net = pos.net_position || pos.net || 0;
+    const upnl = pos.upnl || pos.unrealized_pnl || 0;
     const tid = pos.token_id || market;
     const fullName = tokenNames[tid] || tokenNames[market] || market;
     const shortLabel = smartName(fullName);
     const url = tokenNames[tid + '_url'] || tokenNames[market + '_url'] || '';
     const pct = Math.min(Math.abs(net) / maxPos * 50, 50);
     const isLong = net > 0;
+    const pnlColor = upnl >= 0 ? 'var(--green)' : 'var(--red)';
     const label = url
       ? `<a href="${url}" target="_blank" class="inv-link" title="${fullName}">${shortLabel}</a>`
       : `<span title="${fullName}">${shortLabel}</span>`;
@@ -1863,8 +1865,8 @@ function updateInventory(positions, tokenNames) {
             : `<div class="inv-fill-short" style="width:${pct}%"></div>`
           }
         </div>
-        <span class="inv-value" style="color:${isLong ? 'var(--green)' : 'var(--red)'}">
-          ${net >= 0 ? '+' : ''}${net.toFixed(1)}
+        <span class="inv-value" style="color:${pnlColor}" title="${net >= 0 ? '+' : ''}${net.toFixed(0)} contracts">
+          ${upnl >= 0 ? '+' : ''}$${Math.abs(upnl).toFixed(1)}
         </span>
       </div>
     `;

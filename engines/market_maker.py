@@ -416,7 +416,7 @@ class InventoryManager:
             return False
         
         # Also hard-cap on raw units to prevent runaway accumulation
-        if abs(new_position) * price > self.config.max_position_per_market * 1.5:
+        if abs(new_position) * price > self.config.max_position_per_market:
             return False
         
         if self.total_exposure + (size * price) > self.config.max_total_inventory:
@@ -435,7 +435,7 @@ class InventoryManager:
             return False
         
         # Hard-cap on raw units
-        if abs(new_position) * price > self.config.max_position_per_market * 1.5:
+        if abs(new_position) * price > self.config.max_position_per_market:
             return False
         
         return True
