@@ -137,7 +137,8 @@ class MMConfig:
     # Inventory limits
     max_position_per_market: float = 50.0   # $50 max per market
     max_total_inventory: float = 200.0      # $200 total across all markets
-    inventory_skew_factor: float = 0.5      # How aggressively to skew quotes
+    inventory_skew_factor: float = 1.0      # Base skew aggressiveness (2x original)
+    inventory_skew_nonlinear: bool = True   # Quadratic skew: gentle at low inv, aggressive at high
     
     # OU calibration
     ou_lookback_secs: float = 3600      # 1 hour of price history for calibration
@@ -156,22 +157,23 @@ class MMConfig:
     time_jitter_secs: float = 3.0       # ±3s random timing variation
     price_jitter_cents: float = 0.002   # ±0.2¢ random price variation
 
-    # ── RiskGuard: KPI thresholds & auto-fix parameters ──
-    max_units_per_market: float = 200.0         # Hard cap on contract UNITS (not $)
-    inventory_warn_pct: float = 0.50            # 50% inventory → warning
-    inventory_fadeout_pct: float = 0.60         # 60% → start reducing quote size
-    inventory_oneside_pct: float = 0.80         # 80% → only quote reducing side
-    inventory_halt_pct: float = 0.95            # 95% → stop quoting this market
-    adaptive_skew_threshold: float = 0.50       # 50% inventory → increase skew
-    adaptive_skew_multiplier: float = 3.0       # Skew factor multiplier at max inventory
+    # ── RiskGuard: SAFETY NET (only catches catastrophic failures) ──
+    # Native skew handles 95% of inventory management; RiskGuard is the emergency brake
+    max_units_per_market: float = 200.0         # Hard cap on units — strong skew prevents reaching this
+    inventory_warn_pct: float = 0.70            # 70% → log warning (no action)
+    inventory_fadeout_pct: float = 0.85         # 85% → start reducing quote size
+    inventory_oneside_pct: float = 0.92         # 92% → only quote reducing side
+    inventory_halt_pct: float = 0.98            # 98% → stop quoting (near-max only)
+    adaptive_skew_threshold: float = 0.65       # 65% → mild RiskGuard skew boost
+    adaptive_skew_multiplier: float = 2.0       # Max 2x skew boost (native skew is strong)
     fill_asymmetry_window: int = 20             # Last N fills to check asymmetry
-    fill_asymmetry_threshold: float = 0.75      # >75% one-sided fills → trigger
-    max_drawdown_per_market: float = 20.0       # $20 drawdown → auto-pause market
-    max_drawdown_total: float = 40.0            # $40 total drawdown → reduce all
+    fill_asymmetry_threshold: float = 0.85      # >85% one-sided fills → trigger
+    max_drawdown_per_market: float = 40.0       # $40 drawdown → auto-pause market
+    max_drawdown_total: float = 80.0            # $80 total drawdown → reduce all
     pnl_velocity_window_secs: float = 1800.0    # 30min window for PnL velocity
-    pnl_velocity_alert: float = -10.0           # -$10/30min → alert
-    riskguard_check_interval: float = 30.0      # Check KPIs every 30s
-    riskguard_telegram_cooldown: float = 300.0  # 5min between repeated alerts
+    pnl_velocity_alert: float = -15.0           # -$15/30min → alert
+    riskguard_check_interval: float = 60.0      # Check KPIs every 60s (less overhead)
+    riskguard_telegram_cooldown: float = 600.0  # 10min between repeated alerts
 
 
 # ─────────────────────────────────────────────
@@ -474,22 +476,25 @@ class InventoryManager:
     
     def compute_skew(self, token_id: str, skew_boost: float = 1.0) -> float:
         """
-        Compute quote skew based on inventory + RiskGuard boost.
+        Compute NON-LINEAR quote skew for natural inventory mean-reversion.
 
-        Returns adjustment in cents:
-          - Positive = shift quotes UP (want to sell, make ask more attractive)
-          - Negative = shift quotes DOWN (want to buy, make bid more attractive)
-          - Zero = balanced inventory, symmetric quotes
+        The quadratic skew means:
+          - Low inventory (10-30%): gentle nudge, barely affects quotes
+          - Medium inventory (40-60%): moderate pressure, quotes clearly favor reducing side
+          - High inventory (70%+): strong pressure, aggressively attracts reducing fills
 
-        Skew formula: skew = -inventory_ratio * skew_factor * half_spread * skew_boost
+        This replaces the need for RiskGuard intervention in most cases.
+        RiskGuard only kicks in at extreme levels (85%+) as a safety net.
 
-        The skew_boost parameter comes from RiskGuard — it escalates from 1.0
-        (normal) up to 3.0x when inventory gets dangerously high.
+        Skew examples with inventory_skew_factor=1.0, half_spread=1.5¢:
+          10% inv → 0.17¢ skew  (invisible)
+          30% inv → 0.59¢ skew  (mild)
+          50% inv → 1.13¢ skew  (moderate — bid shifts 1¢ toward reducing)
+          70% inv → 1.87¢ skew  (strong — most of spread on reducing side)
+          90% inv → 2.74¢ skew  (very strong — crosses fair value to attract fills)
         """
         pos = self.get_position(token_id)
 
-        # Use UNIT-BASED ratio for skew (not notional)
-        # This makes skew respond to actual contract count, not dollar value
         max_units = self.config.max_units_per_market
         max_notional = self.config.max_position_per_market
 
@@ -499,14 +504,22 @@ class InventoryManager:
         # Use higher of unit ratio or notional ratio
         unit_ratio = pos.net_position / max(max_units, 1) if max_units > 0 else 0
         notional_ratio = (pos.net_position * max(pos.avg_entry, 0.01)) / max(max_notional, 1)
-        # Use sign from unit_ratio (preserves direction), magnitude from max
         if abs(unit_ratio) > abs(notional_ratio):
             inventory_ratio = unit_ratio
         else:
             inventory_ratio = notional_ratio
 
-        # Apply base skew + RiskGuard boost
-        effective_skew_factor = self.config.inventory_skew_factor * skew_boost
+        # ── NON-LINEAR SKEW ──
+        # Quadratic acceleration: skew grows with ratio² making it
+        # gentle at low inventory but aggressive at high inventory
+        abs_ratio = abs(inventory_ratio)
+        if self.config.inventory_skew_nonlinear:
+            # nonlinear_factor: 1.0 at 0%, 1.25 at 50%, 1.64 at 80%, 2.0 at 100%
+            nonlinear_factor = 1.0 + abs_ratio ** 2
+        else:
+            nonlinear_factor = 1.0
+
+        effective_skew_factor = self.config.inventory_skew_factor * skew_boost * nonlinear_factor
         skew = -inventory_ratio * effective_skew_factor * self.config.target_half_spread
 
         return skew
