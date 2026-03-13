@@ -2306,7 +2306,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-const API_BASE = window.location.origin;
+const API_BASE = '';
 const REFRESH_MS = 5000; // 5 second refresh
 
 // ── State ──
@@ -2319,11 +2319,33 @@ let state = {
 };
 
 // ── Fetch Helpers ──
+function _xhrJSON(url, timeout) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = timeout || 4000;
+    xhr.withCredentials = true;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); } catch(e) { resolve(null); }
+      } else { resolve(null); }
+    };
+    xhr.onerror = () => resolve(null);
+    xhr.ontimeout = () => resolve(null);
+    xhr.send();
+  });
+}
 async function fetchJSON(endpoint) {
   try {
-    const resp = await fetch(`${API_BASE}${endpoint}`, { signal: AbortSignal.timeout(4000) });
-    if (!resp.ok) return null;
-    return await resp.json();
+    const url = `${API_BASE}${endpoint}`;
+    // Use XHR as fallback when fetch is blocked (credential-embedded URLs)
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch(fetchErr) {
+      return await _xhrJSON(url, 4000);
+    }
   } catch (e) {
     return null;
   }
