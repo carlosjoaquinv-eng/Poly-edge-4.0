@@ -1592,6 +1592,62 @@ body::after {
 .rg-action-oneside { background: rgba(239,71,111,0.25); color: var(--red); }
 .rg-action-halt_market { background: rgba(239,71,111,0.35); color: #ff4466; }
 .rg-action-halt_all { background: rgba(239,71,111,0.5); color: #fff; }
+/* ── Theme Toggle Switch (Config) ── */
+.theme-switch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  cursor: pointer;
+}
+.theme-switch input { opacity: 0; width: 0; height: 0; }
+.theme-switch .slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: rgba(232,190,93,0.15);
+  border: 1px solid rgba(232,190,93,0.3);
+  transition: all 0.4s ease;
+}
+.theme-switch input:checked + .slider {
+  background: rgba(232,190,93,0.25);
+  border-color: rgba(232,190,93,0.45);
+}
+.theme-switch .slider::before {
+  content: '\1F319';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  top: 3px;
+  left: 4px;
+  background: var(--bg-solid-2);
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.theme-switch input:checked + .slider::before {
+  transform: translateX(22px);
+  content: '\2600';
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(232,190,93,0.4);
+}
+.theme-toggle-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+.theme-toggle-label.active-dark { color: var(--text-0); }
+.theme-toggle-label.active-light { color: var(--amber); }
+
 .rg-resume-btn {
   flex: 0 0 50px; padding: 2px 4px; font-size: 8px; font-family: var(--sans);
   background: rgba(46,203,113,0.08); border: 1px solid rgba(46,203,113,0.25);
@@ -2210,6 +2266,36 @@ function toggleTheme() {
     localStorage.setItem('polyedge-theme', 'light');
     if (btn) btn.textContent = '☀️';
   }
+  syncConfigThemeToggle();
+}
+
+function handleConfigThemeToggle(el) {
+  const html = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  if (el.checked) {
+    html.setAttribute('data-theme', 'light');
+    localStorage.setItem('polyedge-theme', 'light');
+    if (btn) btn.textContent = '☀️';
+  } else {
+    html.removeAttribute('data-theme');
+    localStorage.setItem('polyedge-theme', 'dark');
+    if (btn) btn.textContent = '🌙';
+  }
+  syncConfigThemeToggle();
+}
+
+function syncConfigThemeToggle() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const sw = document.getElementById('config-theme-switch');
+  if (sw) sw.checked = isLight;
+  const labels = document.querySelectorAll('.theme-toggle-label');
+  labels.forEach(l => {
+    if (l.textContent.trim() === 'DARK') {
+      l.className = 'theme-toggle-label' + (!isLight ? ' active-dark' : '');
+    } else if (l.textContent.trim() === 'LIGHT') {
+      l.className = 'theme-toggle-label' + (isLight ? ' active-light' : '');
+    }
+  });
 }
 
 // Sync button icon on load
@@ -3480,6 +3566,19 @@ async function refreshConfig() {
                 <span class="slider"></span>
               </label>
               <span class="mode-toggle-label ${!isPaper ? 'active-live' : 'inactive'}">LIVE</span>
+            </div>
+          </span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">Theme</span>
+          <span class="config-val">
+            <div class="mode-toggle-container">
+              <span class="theme-toggle-label ${document.documentElement.getAttribute('data-theme') !== 'light' ? 'active-dark' : ''}">DARK</span>
+              <label class="theme-switch">
+                <input type="checkbox" id="config-theme-switch" ${document.documentElement.getAttribute('data-theme') === 'light' ? 'checked' : ''} onchange="handleConfigThemeToggle(this)">
+                <span class="slider"></span>
+              </label>
+              <span class="theme-toggle-label ${document.documentElement.getAttribute('data-theme') === 'light' ? 'active-light' : ''}">LIGHT</span>
             </div>
           </span>
         </div>
