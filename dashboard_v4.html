@@ -4,162 +4,163 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PolyEdge v4 — Command Center</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg-0: #040810;
-  --bg-1: rgba(8,16,32,0.85);
-  --bg-2: rgba(14,25,50,0.7);
-  --bg-3: rgba(20,35,65,0.6);
-  --bg-solid-1: #081020;
-  --bg-solid-2: #0e1932;
-  --border: rgba(0,180,216,0.12);
-  --border-active: rgba(0,180,216,0.3);
-  --border-glow: rgba(0,180,216,0.5);
-  --text-0: #e4eef8;
-  --text-1: #8aa4c0;
-  --text-2: #4a6a8a;
-  --green: #06d6a0;
-  --green-dim: #04a87e;
-  --red: #ef476f;
-  --red-dim: #c22a52;
-  --amber: #ffd166;
-  --amber-dim: #e6b84d;
-  --cyan: #00b4d8;
-  --cyan-bright: #48cae4;
-  --purple: #7209b7;
-  --purple-light: #a855f7;
-  --blue: #4895ef;
-  --surface-glass: rgba(10,20,40,0.65);
-  --glow-cyan: 0 0 20px rgba(0,180,216,0.15), 0 0 60px rgba(0,180,216,0.05);
-  --glow-hover: 0 0 30px rgba(0,180,216,0.25), 0 0 80px rgba(0,180,216,0.08);
-  --heading: 'Orbitron', sans-serif;
-  --sans: 'Rajdhani', sans-serif;
-  --mono: 'Fira Code', monospace;
+  /* ── Dark Theme (Terminal) ── */
+  --bg-0: #0a0e14;
+  --bg-1: rgba(14,18,26,0.92);
+  --bg-2: rgba(20,25,35,0.78);
+  --bg-3: rgba(28,33,45,0.65);
+  --bg-solid-1: #0e121a;
+  --bg-solid-2: #141922;
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(232,190,93,0.28);
+  --border-glow: rgba(232,190,93,0.45);
+  --text-0: #e8e4de;
+  --text-1: #9b9590;
+  --text-2: #5e5953;
+  --green: #2ecb71;
+  --green-dim: #1fa85c;
+  --red: #e74c5a;
+  --red-dim: #c7303f;
+  --amber: #e8be5d;
+  --amber-dim: #c9a34a;
+  --cyan: #e8be5d;
+  --cyan-bright: #f0cc72;
+  --purple: #8b6cc1;
+  --purple-light: #a78bdb;
+  --blue: #5a9cf5;
+  --surface-glass: rgba(14,18,26,0.72);
+  --glow-cyan: 0 0 18px rgba(232,190,93,0.1), 0 0 50px rgba(232,190,93,0.03);
+  --glow-hover: 0 0 24px rgba(232,190,93,0.16), 0 0 60px rgba(232,190,93,0.05);
+  --heading: 'Instrument Sans', 'DM Sans', sans-serif;
+  --sans: 'DM Sans', sans-serif;
+  --mono: 'Space Mono', 'SF Mono', monospace;
 }
 
 /* ── Light Theme Overrides ── */
 [data-theme="light"] {
-  --bg-0: #f0f2f5;
-  --bg-1: rgba(255,255,255,0.92);
-  --bg-2: rgba(240,242,245,0.85);
-  --bg-3: rgba(230,233,238,0.8);
-  --bg-solid-1: #ffffff;
-  --bg-solid-2: #f5f6f8;
-  --border: rgba(0,0,0,0.08);
-  --border-active: rgba(0,120,180,0.25);
-  --border-glow: rgba(0,120,180,0.35);
-  --text-0: #1a2332;
-  --text-1: #4a5568;
-  --text-2: #718096;
-  --green: #059669;
-  --green-dim: #047857;
-  --red: #dc2626;
-  --red-dim: #b91c1c;
-  --amber: #d97706;
-  --amber-dim: #b45309;
-  --cyan: #0284c7;
-  --cyan-bright: #0369a1;
-  --purple: #7c3aed;
-  --purple-light: #8b5cf6;
-  --blue: #2563eb;
-  --surface-glass: rgba(255,255,255,0.75);
-  --glow-cyan: 0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
-  --glow-hover: 0 2px 8px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06);
+  --bg-0: #f5f2ed;
+  --bg-1: rgba(255,253,249,0.95);
+  --bg-2: rgba(245,240,233,0.88);
+  --bg-3: rgba(236,230,221,0.8);
+  --bg-solid-1: #fffdf9;
+  --bg-solid-2: #f7f4ef;
+  --border: rgba(80,65,45,0.1);
+  --border-active: rgba(180,140,50,0.3);
+  --border-glow: rgba(180,140,50,0.4);
+  --text-0: #1c1814;
+  --text-1: #5c554d;
+  --text-2: #8a827a;
+  --green: #1b8f50;
+  --green-dim: #157a42;
+  --red: #c93843;
+  --red-dim: #a82a33;
+  --amber: #b48a2c;
+  --amber-dim: #96721e;
+  --cyan: #b48a2c;
+  --cyan-bright: #9a7424;
+  --purple: #6b52a0;
+  --purple-light: #7d63b5;
+  --blue: #3d7dd8;
+  --surface-glass: rgba(255,253,249,0.82);
+  --glow-cyan: 0 1px 4px rgba(80,65,45,0.06), 0 3px 10px rgba(80,65,45,0.03);
+  --glow-hover: 0 2px 10px rgba(80,65,45,0.08), 0 6px 20px rgba(80,65,45,0.04);
 }
 
 [data-theme="light"] body::before { opacity: 0 !important; animation: none !important; }
-[data-theme="light"] body::after { opacity: 0 !important; }
+[data-theme="light"] body::after { opacity: 0.15 !important; }
 [data-theme="light"] .scanline-overlay { display: none; }
 
 [data-theme="light"] .header {
-  background: rgba(255,255,255,0.95);
+  background: rgba(255,253,249,0.96);
   backdrop-filter: blur(20px) saturate(120%);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 0 rgba(80,65,45,0.08);
 }
 [data-theme="light"] .header::after {
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
-  opacity: 0.3;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--purple), var(--amber), transparent);
+  opacity: 0.25;
 }
 
 [data-theme="light"] .tab-bar {
-  background: rgba(255,255,255,0.85);
+  background: rgba(255,253,249,0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 [data-theme="light"] .tab-btn:hover {
-  background: rgba(2,132,199,0.06);
-  border-color: rgba(2,132,199,0.15);
+  background: rgba(180,138,44,0.05);
+  border-color: rgba(180,138,44,0.12);
 }
 [data-theme="light"] .tab-btn.active {
   color: var(--cyan);
-  background: rgba(2,132,199,0.08);
-  border-color: rgba(2,132,199,0.25);
-  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+  background: rgba(180,138,44,0.08);
+  border-color: rgba(180,138,44,0.22);
+  box-shadow: 0 1px 4px rgba(180,138,44,0.08);
 }
 
 [data-theme="light"] .panel {
-  background: rgba(255,255,255,0.92);
+  background: rgba(255,253,249,0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 3px rgba(80,65,45,0.04);
 }
 [data-theme="light"] .panel:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 10px rgba(80,65,45,0.07);
   transform: translateY(-1px);
 }
 [data-theme="light"] .panel-header {
-  background: linear-gradient(135deg, rgba(2,132,199,0.03) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(180,138,44,0.03) 0%, transparent 60%);
 }
 
 [data-theme="light"] .metric {
-  background: linear-gradient(135deg, rgba(2,132,199,0.02) 0%, rgba(124,58,237,0.01) 100%);
+  background: linear-gradient(135deg, rgba(180,138,44,0.02) 0%, rgba(107,82,160,0.01) 100%);
 }
-[data-theme="light"] .signal-row { background: rgba(2,132,199,0.02); }
-[data-theme="light"] .signal-row:hover { background: rgba(2,132,199,0.05); }
+[data-theme="light"] .signal-row { background: rgba(180,138,44,0.02); }
+[data-theme="light"] .signal-row:hover { background: rgba(180,138,44,0.05); }
 
-[data-theme="light"] .meta-card { background: rgba(2,132,199,0.02); }
-[data-theme="light"] .adj-row { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .meta-card { background: rgba(180,138,44,0.02); }
+[data-theme="light"] .adj-row { background: rgba(80,65,45,0.02); }
 
-[data-theme="light"] .dtable td { border-bottom: 1px solid rgba(0,0,0,0.04); }
-[data-theme="light"] .dtable tr:hover td { background: rgba(2,132,199,0.03); }
-[data-theme="light"] .trades-table td { border-bottom: 1px solid rgba(0,0,0,0.04); }
-[data-theme="light"] .trades-table tr:hover td { background: rgba(2,132,199,0.03); }
+[data-theme="light"] .dtable td { border-bottom: 1px solid rgba(80,65,45,0.05); }
+[data-theme="light"] .dtable tr:hover td { background: rgba(180,138,44,0.03); }
+[data-theme="light"] .trades-table td { border-bottom: 1px solid rgba(80,65,45,0.05); }
+[data-theme="light"] .trades-table tr:hover td { background: rgba(180,138,44,0.03); }
 
 [data-theme="light"] .config-section {
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  background: rgba(255,253,249,0.94);
+  box-shadow: 0 1px 3px rgba(80,65,45,0.04);
 }
 [data-theme="light"] .config-section-header {
-  background: linear-gradient(135deg, rgba(2,132,199,0.04) 0%, rgba(124,58,237,0.02) 100%);
+  background: linear-gradient(135deg, rgba(180,138,44,0.04) 0%, rgba(107,82,160,0.02) 100%);
 }
-[data-theme="light"] .config-row:hover { background: rgba(2,132,199,0.02); }
-[data-theme="light"] .config-row { border-bottom: 1px solid rgba(0,0,0,0.04); }
+[data-theme="light"] .config-row:hover { background: rgba(180,138,44,0.03); }
+[data-theme="light"] .config-row { border-bottom: 1px solid rgba(80,65,45,0.05); }
 
 [data-theme="light"] .chart-wrapper {
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  background: rgba(255,253,249,0.94);
+  box-shadow: 0 1px 3px rgba(80,65,45,0.04);
 }
-[data-theme="light"] .range-btn { background: rgba(0,0,0,0.03); }
+[data-theme="light"] .range-btn { background: rgba(80,65,45,0.03); }
 [data-theme="light"] .range-btn.active {
-  background: rgba(2,132,199,0.08);
-  box-shadow: 0 1px 4px rgba(2,132,199,0.1);
+  background: rgba(180,138,44,0.08);
+  box-shadow: 0 1px 4px rgba(180,138,44,0.08);
 }
 
 [data-theme="light"] .pnl-bar-track,
-[data-theme="light"] .inv-track { background: rgba(0,0,0,0.04); }
+[data-theme="light"] .inv-track { background: rgba(80,65,45,0.05); }
 
-[data-theme="light"] .log-entry { border-bottom: 1px solid rgba(0,0,0,0.04); }
-[data-theme="light"] .log-entry:hover { background: rgba(2,132,199,0.02); }
+[data-theme="light"] .log-entry { border-bottom: 1px solid rgba(80,65,45,0.05); }
+[data-theme="light"] .log-entry:hover { background: rgba(180,138,44,0.03); }
 
 [data-theme="light"] .stat-positive { color: var(--green); text-shadow: none; }
 [data-theme="light"] .stat-negative { color: var(--red); text-shadow: none; }
 
 [data-theme="light"] .mode-paper {
-  background: rgba(217,119,6,0.08);
+  background: rgba(180,138,44,0.08);
   color: var(--amber);
-  border-color: rgba(217,119,6,0.2);
+  border-color: rgba(180,138,44,0.2);
   box-shadow: none;
 }
 [data-theme="light"] .dot-green { box-shadow: 0 0 4px var(--green); }
@@ -167,40 +168,40 @@
 [data-theme="light"] .dot-amber { box-shadow: 0 0 4px var(--amber); }
 
 [data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--cyan), var(--purple));
+  background: linear-gradient(180deg, var(--amber), var(--purple));
 }
 
 /* ── Theme Toggle ── */
 .theme-toggle {
-  background: rgba(0,180,216,0.1);
-  border: 1px solid rgba(0,180,216,0.3);
+  background: rgba(232,190,93,0.08);
+  border: 1px solid rgba(232,190,93,0.2);
   color: var(--text-0);
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  transition: all 0.3s ease;
+  font-size: 18px;
+  transition: all 0.25s ease;
   flex-shrink: 0;
   line-height: 1;
 }
 .theme-toggle:hover {
-  border-color: var(--cyan);
-  background: rgba(0,180,216,0.2);
-  box-shadow: 0 0 12px rgba(0,180,216,0.2);
-  transform: scale(1.05);
+  border-color: var(--amber);
+  background: rgba(232,190,93,0.15);
+  box-shadow: 0 0 10px rgba(232,190,93,0.12);
+  transform: scale(1.04);
 }
 [data-theme="light"] .theme-toggle {
-  background: rgba(2,132,199,0.08);
-  border-color: rgba(2,132,199,0.25);
+  background: rgba(180,138,44,0.06);
+  border-color: rgba(180,138,44,0.18);
 }
 [data-theme="light"] .theme-toggle:hover {
-  background: rgba(2,132,199,0.15);
-  border-color: var(--cyan);
-  box-shadow: 0 0 8px rgba(2,132,199,0.15);
+  background: rgba(180,138,44,0.12);
+  border-color: var(--amber);
+  box-shadow: 0 0 8px rgba(180,138,44,0.1);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -223,9 +224,9 @@ body::before {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0,180,216,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(114,9,183,0.05) 0%, transparent 50%),
-    radial-gradient(ellipse 70% 60% at 50% 90%, rgba(6,214,160,0.04) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 20% 40%, rgba(232,190,93,0.035) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(139,108,193,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 60% at 50% 90%, rgba(46,203,113,0.02) 0%, transparent 50%);
   z-index: 0;
   pointer-events: none;
   animation: bgShift 20s ease-in-out infinite alternate;
@@ -248,7 +249,7 @@ body::after {
   opacity: 0.4;
 }
 
-/* Scanline effect */
+/* Subtle grid overlay */
 .scanline-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -256,8 +257,8 @@ body::after {
     0deg,
     transparent,
     transparent 2px,
-    rgba(0,180,216,0.008) 2px,
-    rgba(0,180,216,0.008) 4px
+    rgba(232,190,93,0.004) 2px,
+    rgba(232,190,93,0.004) 4px
   );
   z-index: 1;
   pointer-events: none;
@@ -270,10 +271,10 @@ body::after {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--cyan), var(--purple));
+  background: linear-gradient(180deg, var(--amber), var(--purple));
   border-radius: 10px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--cyan-bright); }
+::-webkit-scrollbar-thumb:hover { background: var(--amber); }
 
 /* ── Animations ── */
 @keyframes fadeInUp {
@@ -281,8 +282,8 @@ body::after {
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 8px rgba(0,180,216,0.3); }
-  50% { box-shadow: 0 0 20px rgba(0,180,216,0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(232,190,93,0.2); }
+  50% { box-shadow: 0 0 18px rgba(232,190,93,0.4); }
 }
 @keyframes blink {
   0%, 100% { opacity: 1; }
@@ -310,10 +311,10 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  background: rgba(6,12,24,0.9);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  padding: 12px 24px;
+  background: rgba(10,14,20,0.92);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -326,19 +327,19 @@ body::after {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--cyan), transparent);
-  opacity: 0.5;
-  animation: borderFlow 4s linear infinite;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--purple), var(--amber), transparent);
+  opacity: 0.4;
+  animation: borderFlow 6s linear infinite;
   background-size: 200% 100%;
 }
 
-.header-left { display: flex; align-items: center; gap: 18px; }
+.header-left { display: flex; align-items: center; gap: 16px; }
 .logo {
   font-family: var(--heading);
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 3px;
-  background: linear-gradient(135deg, var(--cyan-bright) 0%, var(--cyan) 40%, var(--purple-light) 100%);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  background: linear-gradient(135deg, var(--amber) 0%, #f0cc72 50%, var(--purple-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -346,12 +347,12 @@ body::after {
   position: relative;
 }
 .logo span {
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-weight: 400;
-  font-size: 11px;
-  letter-spacing: 1px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
   -webkit-text-fill-color: var(--text-2);
-  margin-left: 8px;
+  margin-left: 6px;
   vertical-align: super;
 }
 
@@ -393,8 +394,8 @@ body::after {
   font-weight: 600;
   letter-spacing: 1px;
 }
-.stat-positive { color: var(--green); text-shadow: 0 0 12px rgba(6,214,160,0.4); }
-.stat-negative { color: var(--red); text-shadow: 0 0 12px rgba(239,71,111,0.4); }
+.stat-positive { color: var(--green); text-shadow: 0 0 10px rgba(46,203,113,0.3); }
+.stat-negative { color: var(--red); text-shadow: 0 0 10px rgba(231,76,90,0.3); }
 .stat-neutral { color: var(--text-1); }
 
 .uptime {
@@ -430,12 +431,12 @@ body::after {
 .tab-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(6,12,24,0.7);
+  gap: 2px;
+  background: rgba(10,14,20,0.65);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
-  padding: 8px 24px;
+  padding: 6px 24px;
   position: relative;
   z-index: 99;
 }
@@ -443,27 +444,27 @@ body::after {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-2);
-  font-family: var(--heading);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  padding: 8px 20px;
+  padding: 7px 18px;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 .tab-btn:hover {
   color: var(--text-0);
-  background: rgba(0,180,216,0.06);
-  border-color: rgba(0,180,216,0.15);
+  background: rgba(232,190,93,0.05);
+  border-color: rgba(232,190,93,0.12);
 }
 .tab-btn.active {
-  color: var(--cyan-bright);
-  background: rgba(0,180,216,0.1);
-  border-color: rgba(0,180,216,0.3);
-  box-shadow: 0 0 15px rgba(0,180,216,0.12), inset 0 0 15px rgba(0,180,216,0.05);
+  color: var(--amber);
+  background: rgba(232,190,93,0.08);
+  border-color: rgba(232,190,93,0.22);
+  box-shadow: 0 0 12px rgba(232,190,93,0.08), inset 0 0 10px rgba(232,190,93,0.03);
 }
 
 .tab-content { display: none; }
@@ -511,16 +512,16 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(0,180,216,0.04) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(232,190,93,0.03) 0%, transparent 60%);
 }
 .panel-title {
-  font-family: var(--heading);
-  font-size: 10px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 2.5px;
+  letter-spacing: 1.5px;
   color: var(--text-1);
 }
 .panel-tag {
@@ -531,10 +532,10 @@ body::after {
   border-radius: 20px;
   letter-spacing: 0.5px;
 }
-.tag-engine { background: rgba(0,180,216,0.1); color: var(--cyan); border: 1px solid rgba(0,180,216,0.2); }
-.tag-feed { background: rgba(168,85,247,0.1); color: var(--purple-light); border: 1px solid rgba(168,85,247,0.2); }
-.tag-meta { background: rgba(72,149,239,0.1); color: var(--blue); border: 1px solid rgba(72,149,239,0.2); }
-.tag-risk { background: rgba(239,71,111,0.1); color: var(--red); border: 1px solid rgba(239,71,111,0.2); }
+.tag-engine { background: rgba(232,190,93,0.08); color: var(--amber); border: 1px solid rgba(232,190,93,0.18); }
+.tag-feed { background: rgba(139,108,193,0.08); color: var(--purple-light); border: 1px solid rgba(139,108,193,0.18); }
+.tag-meta { background: rgba(90,156,245,0.08); color: var(--blue); border: 1px solid rgba(90,156,245,0.18); }
+.tag-risk { background: rgba(231,76,90,0.08); color: var(--red); border: 1px solid rgba(231,76,90,0.18); }
 
 .panel-body {
   flex: 1;
@@ -562,11 +563,11 @@ body::after {
 }
 .dtable td {
   padding: 7px 4px;
-  border-bottom: 1px solid rgba(0,180,216,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   font-size: 12px;
   transition: background 0.2s;
 }
-.dtable tr:hover td { background: rgba(0,180,216,0.04); }
+.dtable tr:hover td { background: rgba(232,190,93,0.03); }
 
 /* ── Metric Grid ── */
 .metrics {
@@ -575,11 +576,11 @@ body::after {
   gap: 10px;
 }
 .metric {
-  background: linear-gradient(135deg, rgba(0,180,216,0.03) 0%, rgba(114,9,183,0.02) 100%);
+  background: linear-gradient(135deg, rgba(232,190,93,0.02) 0%, rgba(139,108,193,0.01) 100%);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
 }
@@ -587,11 +588,11 @@ body::after {
   content: '';
   position: absolute;
   top: 0; left: 0;
-  width: 3px;
+  width: 2px;
   height: 100%;
-  background: linear-gradient(180deg, var(--cyan), transparent);
+  background: linear-gradient(180deg, var(--amber), transparent);
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.25s;
 }
 .metric:hover::before { opacity: 1; }
 .metric:hover { border-color: var(--border-active); }
@@ -621,13 +622,13 @@ body::after {
   padding: 10px 12px;
   border-radius: 8px;
   margin-bottom: 6px;
-  background: rgba(0,180,216,0.03);
+  background: rgba(232,190,93,0.02);
   border: 1px solid transparent;
   border-left: 3px solid transparent;
   transition: all 0.25s ease;
 }
 .signal-row:hover {
-  background: rgba(0,180,216,0.06);
+  background: rgba(232,190,93,0.04);
   border-color: var(--border);
 }
 .signal-buy { border-left-color: var(--green); }
@@ -657,10 +658,10 @@ body::after {
   letter-spacing: 1px;
   white-space: nowrap;
 }
-.badge-critical { background: rgba(239,71,111,0.15); color: var(--red); border: 1px solid rgba(239,71,111,0.3); }
-.badge-high { background: rgba(255,209,102,0.12); color: var(--amber); border: 1px solid rgba(255,209,102,0.25); }
-.badge-medium { background: rgba(72,149,239,0.12); color: var(--blue); border: 1px solid rgba(72,149,239,0.25); }
-.badge-low { background: rgba(74,106,138,0.15); color: var(--text-2); border: 1px solid rgba(74,106,138,0.2); }
+.badge-critical { background: rgba(231,76,90,0.1); color: var(--red); border: 1px solid rgba(231,76,90,0.22); }
+.badge-high { background: rgba(232,190,93,0.1); color: var(--amber); border: 1px solid rgba(232,190,93,0.22); }
+.badge-medium { background: rgba(90,156,245,0.1); color: var(--blue); border: 1px solid rgba(90,156,245,0.22); }
+.badge-low { background: rgba(94,89,83,0.12); color: var(--text-2); border: 1px solid rgba(94,89,83,0.18); }
 
 /* ── PnL Bar ── */
 .pnl-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -702,11 +703,11 @@ body::after {
   display: flex;
   gap: 10px;
   padding: 5px 0;
-  border-bottom: 1px solid rgba(0,180,216,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
   font-size: 11px;
   transition: background 0.2s;
 }
-.log-entry:hover { background: rgba(0,180,216,0.03); }
+.log-entry:hover { background: rgba(232,190,93,0.02); }
 .log-time { color: var(--text-2); white-space: nowrap; width: 55px; flex-shrink: 0; font-family: var(--mono); }
 .log-type { font-family: var(--sans); font-weight: 700; width: 70px; flex-shrink: 0; }
 .log-msg { color: var(--text-1); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -785,12 +786,12 @@ body::after {
 
 /* ── Meta Report ── */
 .meta-card {
-  background: rgba(0,180,216,0.03);
+  background: rgba(232,190,93,0.02);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 10px;
-  transition: border-color 0.3s;
+  transition: border-color 0.25s;
 }
 .meta-card:hover { border-color: var(--border-active); }
 .meta-card-title {
@@ -814,7 +815,7 @@ body::after {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0,0,0,0.15);
   border: 1px solid var(--border);
   border-radius: 6px;
   margin-top: 5px;
@@ -867,7 +868,7 @@ body::after {
   left: 0;
   width: 60px;
   height: 1px;
-  background: linear-gradient(90deg, var(--cyan), transparent);
+  background: linear-gradient(90deg, var(--amber), transparent);
 }
 
 .trades-table { width: 100%; border-collapse: separate; border-spacing: 0; }
@@ -888,23 +889,326 @@ body::after {
 .trades-table th:hover { color: var(--cyan); }
 .trades-table td {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(0,180,216,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   font-size: 12px;
   transition: background 0.2s;
 }
-.trades-table tr:hover td { background: rgba(0,180,216,0.04); }
+.trades-table tr:hover td { background: rgba(232,190,93,0.03); }
 
-/* ── PnL Tab ── */
-.pnl-container { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+/* ── PnL Tab (Redesigned) ── */
+.pnl-container { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+
+/* Hero Stats Row — big numbers with sparklines */
+.pnl-hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.pnl-hero-card {
+  background: var(--bg-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px 14px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInUp 0.5s ease-out both;
+  cursor: default;
+}
+.pnl-hero-card:nth-child(1) { animation-delay: 0.05s; }
+.pnl-hero-card:nth-child(2) { animation-delay: 0.1s; }
+.pnl-hero-card:nth-child(3) { animation-delay: 0.15s; }
+.pnl-hero-card:nth-child(4) { animation-delay: 0.2s; }
+
+.pnl-hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--amber), var(--purple));
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.pnl-hero-card:hover { border-color: var(--border-active); box-shadow: var(--glow-hover); transform: translateY(-2px); }
+.pnl-hero-card:hover::before { opacity: 1; }
+
+.pnl-hero-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pnl-hero-icon {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.pnl-hero-value {
+  font-family: var(--heading);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  transition: color 0.3s;
+}
+.pnl-hero-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 4px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pnl-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--heading);
+  letter-spacing: 0.5px;
+}
+.pnl-hero-badge.up { background: rgba(46,203,113,0.1); color: var(--green); }
+.pnl-hero-badge.down { background: rgba(231,76,90,0.1); color: var(--red); }
+.pnl-hero-badge.neutral { background: rgba(155,149,144,0.08); color: var(--text-2); }
+
+.pnl-hero-sparkline {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 50%;
+  height: 40px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Engine Breakdown Grid */
+.pnl-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.pnl-engine-card {
+  background: var(--bg-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.35s ease;
+  animation: fadeInUp 0.5s ease-out both;
+}
+.pnl-engine-card:nth-child(1) { animation-delay: 0.08s; }
+.pnl-engine-card:nth-child(2) { animation-delay: 0.13s; }
+.pnl-engine-card:nth-child(3) { animation-delay: 0.18s; }
+.pnl-engine-card:hover { border-color: var(--border-active); box-shadow: var(--glow-hover); }
+
+.pnl-engine-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+.pnl-engine-header:hover { background: rgba(232,190,93,0.03); }
+
+.pnl-engine-title {
+  font-family: var(--heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pnl-engine-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.pnl-engine-pnl {
+  font-family: var(--heading);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.pnl-engine-toggle {
+  font-size: 10px;
+  color: var(--text-2);
+  transition: transform 0.3s;
+  font-family: var(--mono);
+}
+.pnl-engine-toggle.open { transform: rotate(90deg); }
+
+.pnl-engine-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s;
+}
+.pnl-engine-body.open {
+  max-height: 500px;
+  padding: 14px 18px;
+}
+.pnl-engine-body .metric {
+  margin-bottom: 6px;
+}
+.pnl-engine-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12px;
+}
+.pnl-engine-detail-row:last-child { border-bottom: none; }
+.pnl-engine-detail-key {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--text-2);
+  letter-spacing: 0.3px;
+}
+.pnl-engine-detail-val {
+  font-family: var(--heading);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* PnL Donut Chart Container */
+.pnl-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 310px;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1000px) {
+  .pnl-chart-row { grid-template-columns: 1fr; }
+}
+
+/* Donut/Allocation Panel */
+.pnl-allocation {
+  background: var(--bg-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: fadeInUp 0.5s ease-out both;
+  animation-delay: 0.2s;
+  transition: all 0.35s ease;
+}
+.pnl-allocation:hover { border-color: var(--border-active); }
+
+.pnl-alloc-title {
+  font-family: var(--heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+  align-self: flex-start;
+}
+.pnl-donut-container {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.pnl-donut-container canvas {
+  display: block;
+  width: 150px;
+  height: 150px;
+}
+.pnl-donut-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.pnl-donut-center-value {
+  font-family: var(--heading);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+.pnl-donut-center-label {
+  font-family: var(--sans);
+  font-size: 9px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.pnl-alloc-legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pnl-alloc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(232,190,93,0.02);
+  transition: background 0.2s;
+  cursor: default;
+}
+.pnl-alloc-item:hover { background: rgba(232,190,93,0.05); }
+.pnl-alloc-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.pnl-alloc-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.pnl-alloc-item-val {
+  font-family: var(--heading);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Main chart area */
 .chart-wrapper {
   background: var(--bg-1);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 20px;
-  margin-bottom: 16px;
   transition: border-color 0.3s;
+  animation: fadeInUp 0.5s ease-out both;
+  animation-delay: 0.15s;
 }
 .chart-wrapper:hover { border-color: var(--border-active); }
 
@@ -938,10 +1242,10 @@ body::after {
 }
 .range-btn:hover { color: var(--text-0); border-color: var(--border-active); }
 .range-btn.active {
-  color: var(--cyan-bright);
-  border-color: var(--cyan);
-  background: rgba(0,180,216,0.1);
-  box-shadow: 0 0 10px rgba(0,180,216,0.15);
+  color: var(--amber);
+  border-color: var(--amber);
+  background: rgba(232,190,93,0.08);
+  box-shadow: 0 0 8px rgba(232,190,93,0.1);
 }
 #pnl-canvas { width: 100%; height: 300px; display: block; }
 .pnl-legend {
@@ -963,6 +1267,114 @@ body::after {
   margin-right: 8px;
   vertical-align: middle;
 }
+
+/* Per-Market PnL Breakdown */
+.pnl-markets-panel {
+  background: var(--bg-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.35s ease;
+  animation: fadeInUp 0.5s ease-out both;
+  animation-delay: 0.25s;
+}
+.pnl-markets-panel:hover { border-color: var(--border-active); }
+
+.pnl-markets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(232,190,93,0.03) 0%, transparent 60%);
+}
+.pnl-markets-title {
+  font-family: var(--heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--text-1);
+}
+.pnl-markets-body {
+  padding: 12px 20px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.pnl-market-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.2s;
+}
+.pnl-market-row:last-child { border-bottom: none; }
+.pnl-market-row:hover { background: rgba(232,190,93,0.03); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 6px; }
+
+.pnl-market-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pnl-market-bar-container {
+  flex: 0 0 120px;
+  height: 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.pnl-market-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  position: absolute;
+}
+.pnl-market-val {
+  flex: 0 0 70px;
+  text-align: right;
+  font-family: var(--heading);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Responsive overrides for PnL */
+@media (max-width: 1200px) {
+  .pnl-hero { grid-template-columns: repeat(2, 1fr); }
+  .pnl-breakdown { grid-template-columns: repeat(2, 1fr); }
+  .pnl-breakdown .pnl-engine-card:nth-child(3) { grid-column: span 2; }
+}
+@media (max-width: 768px) {
+  .pnl-hero { grid-template-columns: 1fr; }
+  .pnl-hero-value { font-size: 22px; }
+  .pnl-breakdown { grid-template-columns: 1fr; }
+  .pnl-breakdown .pnl-engine-card:nth-child(3) { grid-column: span 1; }
+  .pnl-chart-row { grid-template-columns: 1fr; }
+}
+
+/* Light theme overrides for PnL components */
+[data-theme="light"] .pnl-hero-card {
+  background: rgba(255,253,249,0.94);
+  box-shadow: 0 1px 3px rgba(80,65,45,0.04);
+}
+[data-theme="light"] .pnl-hero-card:hover { box-shadow: 0 2px 10px rgba(80,65,45,0.07); }
+[data-theme="light"] .pnl-hero-badge.up { background: rgba(27,143,80,0.08); }
+[data-theme="light"] .pnl-hero-badge.down { background: rgba(201,56,67,0.08); }
+[data-theme="light"] .pnl-engine-card { background: rgba(255,253,249,0.94); box-shadow: 0 1px 3px rgba(80,65,45,0.04); }
+[data-theme="light"] .pnl-engine-header:hover { background: rgba(180,138,44,0.03); }
+[data-theme="light"] .pnl-allocation { background: rgba(255,253,249,0.94); box-shadow: 0 1px 3px rgba(80,65,45,0.04); }
+[data-theme="light"] .pnl-markets-panel { background: rgba(255,253,249,0.94); box-shadow: 0 1px 3px rgba(80,65,45,0.04); }
+[data-theme="light"] .pnl-market-bar-container { background: rgba(80,65,45,0.04); }
+[data-theme="light"] .pnl-alloc-item:hover { background: rgba(180,138,44,0.04); }
 
 /* ── Mode Toggle Switch ── */
 .mode-toggle-container {
@@ -1105,25 +1517,25 @@ body::after {
 
 .config-section-header {
   padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(0,180,216,0.06) 0%, rgba(114,9,183,0.03) 100%);
+  background: linear-gradient(135deg, rgba(232,190,93,0.04) 0%, rgba(139,108,193,0.02) 100%);
   border-bottom: 1px solid var(--border);
-  font-family: var(--heading);
-  font-size: 10px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 3px;
-  color: var(--cyan);
+  letter-spacing: 1.5px;
+  color: var(--amber);
 }
 .config-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(0,180,216,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   transition: background 0.2s;
 }
 .config-row:last-child { border-bottom: none; }
-.config-row:hover { background: rgba(0,180,216,0.03); }
+.config-row:hover { background: rgba(232,190,93,0.02); }
 .config-key {
   font-family: var(--sans);
   font-size: 13px;
@@ -1173,20 +1585,20 @@ body::after {
   flex: 0 0 70px; text-align: center; padding: 2px 6px; border-radius: 3px;
   font-size: 8px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
 }
-.rg-action-none { background: rgba(0,200,150,0.1); color: #00c896; }
-.rg-action-warn { background: rgba(255,183,77,0.15); color: var(--amber); }
+.rg-action-none { background: rgba(46,203,113,0.08); color: var(--green); }
+.rg-action-warn { background: rgba(232,190,93,0.12); color: var(--amber); }
 .rg-action-increase_skew { background: rgba(255,183,77,0.2); color: var(--amber); }
 .rg-action-fadeout { background: rgba(239,71,111,0.15); color: var(--red); }
 .rg-action-oneside { background: rgba(239,71,111,0.25); color: var(--red); }
 .rg-action-halt_market { background: rgba(239,71,111,0.35); color: #ff4466; }
 .rg-action-halt_all { background: rgba(239,71,111,0.5); color: #fff; }
 .rg-resume-btn {
-  flex: 0 0 50px; padding: 2px 4px; font-size: 8px; font-family: var(--heading);
-  background: rgba(0,200,150,0.1); border: 1px solid rgba(0,200,150,0.3);
-  color: #00c896; border-radius: 3px; cursor: pointer; letter-spacing: 0.3px;
+  flex: 0 0 50px; padding: 2px 4px; font-size: 8px; font-family: var(--sans);
+  background: rgba(46,203,113,0.08); border: 1px solid rgba(46,203,113,0.25);
+  color: var(--green); border-radius: 3px; cursor: pointer; letter-spacing: 0.3px;
   display: none;
 }
-.rg-resume-btn:hover { background: rgba(0,200,150,0.2); }
+.rg-resume-btn:hover { background: rgba(46,203,113,0.15); }
 </style>
 </head>
 <body>
@@ -1555,44 +1967,213 @@ body::after {
 <!-- Tab: PnL -->
 <div class="tab-content" id="tab-pnl">
   <div class="pnl-container">
-    <!-- Summary Stats -->
-    <div class="metrics" style="margin-bottom:20px">
-      <div class="metric">
-        <div class="metric-label">Start PnL</div>
-        <div class="metric-value stat-neutral" id="pnl-start">—</div>
+
+    <!-- Hero Stats Row -->
+    <div class="pnl-hero">
+      <div class="pnl-hero-card">
+        <div class="pnl-hero-label"><span class="pnl-hero-icon">💰</span> Total PnL</div>
+        <div class="pnl-hero-value stat-neutral" id="pnl-hero-total">$0.00</div>
+        <div class="pnl-hero-sub">
+          <span class="pnl-hero-badge neutral" id="pnl-hero-delta-badge">— 0%</span>
+          <span id="pnl-hero-delta-text">vs session start</span>
+        </div>
+        <canvas class="pnl-hero-sparkline" id="spark-total"></canvas>
       </div>
-      <div class="metric">
-        <div class="metric-label">Current PnL</div>
-        <div class="metric-value stat-neutral" id="pnl-current">—</div>
+      <div class="pnl-hero-card">
+        <div class="pnl-hero-label"><span class="pnl-hero-icon">📈</span> ROI</div>
+        <div class="pnl-hero-value stat-neutral" id="pnl-hero-roi">0.00%</div>
+        <div class="pnl-hero-sub">
+          <span id="pnl-hero-bankroll">Bankroll: $5,000</span>
+        </div>
+        <canvas class="pnl-hero-sparkline" id="spark-roi"></canvas>
       </div>
-      <div class="metric">
-        <div class="metric-label">Delta</div>
-        <div class="metric-value stat-neutral" id="pnl-delta">—</div>
+      <div class="pnl-hero-card">
+        <div class="pnl-hero-label"><span class="pnl-hero-icon">⚡</span> Exposure</div>
+        <div class="pnl-hero-value stat-neutral" id="pnl-hero-exposure">$0</div>
+        <div class="pnl-hero-sub">
+          <span id="pnl-hero-exposure-pct">0% of $500 cap</span>
+        </div>
+        <canvas class="pnl-hero-sparkline" id="spark-exposure"></canvas>
       </div>
-      <div class="metric">
-        <div class="metric-label">Peak / Trough</div>
-        <div class="metric-value" id="pnl-peak-trough">—</div>
+      <div class="pnl-hero-card">
+        <div class="pnl-hero-label"><span class="pnl-hero-icon">🎯</span> Peak / Trough</div>
+        <div class="pnl-hero-value" id="pnl-hero-peak" style="font-size:22px">—</div>
+        <div class="pnl-hero-sub">
+          <span id="pnl-hero-trough">—</span>
+        </div>
       </div>
     </div>
 
-    <!-- Chart -->
-    <div class="chart-wrapper">
-      <div class="chart-header">
-        <div class="chart-title">PnL Over Time</div>
-        <div class="chart-range">
-          <button class="range-btn" data-range="12">1h</button>
-          <button class="range-btn" data-range="72">6h</button>
-          <button class="range-btn active" data-range="288">24h</button>
-          <button class="range-btn" data-range="0">All</button>
+    <!-- Engine Breakdown Accordion -->
+    <div class="pnl-breakdown">
+      <!-- Market Maker -->
+      <div class="pnl-engine-card">
+        <div class="pnl-engine-header" onclick="toggleEngine('mm')">
+          <div class="pnl-engine-title">
+            <span class="pnl-engine-dot" id="pnl-mm-dot" style="background:var(--green)"></span>
+            Market Maker
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="pnl-engine-pnl stat-neutral" id="pnl-mm-total">$0.00</span>
+            <span class="pnl-engine-toggle" id="toggle-mm">▶</span>
+          </div>
+        </div>
+        <div class="pnl-engine-body" id="body-mm">
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Realized PnL</span>
+            <span class="pnl-engine-detail-val stat-neutral" id="pnl-mm-realized">$0.00</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Unrealized PnL</span>
+            <span class="pnl-engine-detail-val stat-neutral" id="pnl-mm-unrealized">$0.00</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Active Markets</span>
+            <span class="pnl-engine-detail-val" id="pnl-mm-markets">0</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Total Fills</span>
+            <span class="pnl-engine-detail-val" id="pnl-mm-fills">0</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Exposure</span>
+            <span class="pnl-engine-detail-val" id="pnl-mm-exposure">$0</span>
+          </div>
         </div>
       </div>
-      <canvas id="pnl-canvas"></canvas>
-      <div class="pnl-legend">
-        <span><span class="legend-dot" style="background:var(--green)"></span>MM Realized</span>
-        <span><span class="legend-dot" style="background:var(--cyan)"></span>Sniper PnL</span>
-        <span><span class="legend-dot" style="background:var(--text-0)"></span>Total</span>
+
+      <!-- Sniper -->
+      <div class="pnl-engine-card">
+        <div class="pnl-engine-header" onclick="toggleEngine('sniper')">
+          <div class="pnl-engine-title">
+            <span class="pnl-engine-dot" id="pnl-sn-dot" style="background:var(--cyan)"></span>
+            Resolution Sniper
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="pnl-engine-pnl stat-neutral" id="pnl-sn-total">$0.00</span>
+            <span class="pnl-engine-toggle" id="toggle-sniper">▶</span>
+          </div>
+        </div>
+        <div class="pnl-engine-body" id="body-sniper">
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Total PnL</span>
+            <span class="pnl-engine-detail-val stat-neutral" id="pnl-sn-pnl">$0.00</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Win Rate</span>
+            <span class="pnl-engine-detail-val" id="pnl-sn-winrate">0%</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Trades Executed</span>
+            <span class="pnl-engine-detail-val" id="pnl-sn-trades">0</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Exposure</span>
+            <span class="pnl-engine-detail-val" id="pnl-sn-exposure">$0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meta Strategist -->
+      <div class="pnl-engine-card">
+        <div class="pnl-engine-header" onclick="toggleEngine('meta')">
+          <div class="pnl-engine-title">
+            <span class="pnl-engine-dot" id="pnl-meta-dot" style="background:var(--blue)"></span>
+            Meta Strategist
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="pnl-engine-pnl stat-neutral" id="pnl-meta-cost">$0.00</span>
+            <span class="pnl-engine-toggle" id="toggle-meta">▶</span>
+          </div>
+        </div>
+        <div class="pnl-engine-body" id="body-meta">
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">LLM Cost</span>
+            <span class="pnl-engine-detail-val" id="pnl-meta-llm-cost">$0.00</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Runs</span>
+            <span class="pnl-engine-detail-val" id="pnl-meta-runs">0</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Adjustments</span>
+            <span class="pnl-engine-detail-val" id="pnl-meta-adjs">0</span>
+          </div>
+          <div class="pnl-engine-detail-row">
+            <span class="pnl-engine-detail-key">Next Run</span>
+            <span class="pnl-engine-detail-val" id="pnl-meta-next">—</span>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Chart + Allocation Donut -->
+    <div class="pnl-chart-row">
+      <div class="chart-wrapper">
+        <div class="chart-header">
+          <div class="chart-title">PnL Over Time</div>
+          <div class="chart-range">
+            <button class="range-btn" data-range="12">1h</button>
+            <button class="range-btn" data-range="72">6h</button>
+            <button class="range-btn active" data-range="288">24h</button>
+            <button class="range-btn" data-range="0">All</button>
+          </div>
+        </div>
+        <canvas id="pnl-canvas"></canvas>
+        <div class="pnl-legend">
+          <span><span class="legend-dot" style="background:var(--green)"></span>MM Realized</span>
+          <span><span class="legend-dot" style="background:var(--cyan)"></span>Sniper PnL</span>
+          <span><span class="legend-dot" style="background:var(--text-0)"></span>Total</span>
+        </div>
+      </div>
+
+      <!-- PnL Allocation Donut -->
+      <div class="pnl-allocation">
+        <div class="pnl-alloc-title">PnL Allocation</div>
+        <div class="pnl-donut-container">
+          <canvas id="pnl-donut" width="150" height="150"></canvas>
+          <div class="pnl-donut-center">
+            <div class="pnl-donut-center-value" id="donut-total">$0</div>
+            <div class="pnl-donut-center-label">Total</div>
+          </div>
+        </div>
+        <div class="pnl-alloc-legend" id="pnl-alloc-legend">
+          <div class="pnl-alloc-item">
+            <div class="pnl-alloc-item-left">
+              <div class="pnl-alloc-dot" style="background:var(--green)"></div>
+              MM Realized
+            </div>
+            <span class="pnl-alloc-item-val stat-neutral" id="alloc-mm-real">$0</span>
+          </div>
+          <div class="pnl-alloc-item">
+            <div class="pnl-alloc-item-left">
+              <div class="pnl-alloc-dot" style="background:var(--amber)"></div>
+              MM Unrealized
+            </div>
+            <span class="pnl-alloc-item-val stat-neutral" id="alloc-mm-unreal">$0</span>
+          </div>
+          <div class="pnl-alloc-item">
+            <div class="pnl-alloc-item-left">
+              <div class="pnl-alloc-dot" style="background:var(--cyan)"></div>
+              Sniper
+            </div>
+            <span class="pnl-alloc-item-val stat-neutral" id="alloc-sniper">$0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-Market PnL -->
+    <div class="pnl-markets-panel">
+      <div class="pnl-markets-header">
+        <span class="pnl-markets-title">Per-Market Breakdown</span>
+        <span class="panel-tag tag-risk" id="pnl-market-count">0 markets</span>
+      </div>
+      <div class="pnl-markets-body" id="pnl-markets-body">
+        <div class="empty-state" style="font-size:11px">Waiting for data...</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -2330,45 +2911,316 @@ function renderCompletedTrades(trades) {
 }
 
 // ─────────────────────────────────────────────
-// PnL Chart Tab
+// PnL Tab — Interactive Components
 // ─────────────────────────────────────────────
 
-async function refreshPnl() {
-  const n = pnlRange || 9999;
-  const data = await fetchJSON(`/api/history?n=${n}`);
-  if (!data || data.length === 0) {
-    document.getElementById('pnl-start').textContent = '—';
-    document.getElementById('pnl-current').textContent = '—';
-    document.getElementById('pnl-delta').textContent = '—';
-    document.getElementById('pnl-peak-trough').textContent = '—';
+// Engine accordion toggle
+function toggleEngine(engine) {
+  const body = document.getElementById('body-' + engine);
+  const toggle = document.getElementById('toggle-' + engine);
+  if (!body || !toggle) return;
+  body.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+// Mini sparkline drawer
+function drawSparkline(canvasId, values, color) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || values.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = 2;
+
+  let min = Math.min(...values), max = Math.max(...values);
+  if (max === min) { max += 1; min -= 1; }
+  const range = max - min;
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, color + '30');
+  grad.addColorStop(1, color + '02');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(pad, H - pad - ((values[0] - min) / range) * (H - 2 * pad));
+  for (let i = 1; i < values.length; i++) {
+    const x = pad + (i / (values.length - 1)) * (W - 2 * pad);
+    const y = H - pad - ((values[i] - min) / range) * (H - 2 * pad);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W - pad, H - pad);
+  ctx.lineTo(pad, H - pad);
+  ctx.closePath();
+  ctx.fill();
+
+  // Line
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < values.length; i++) {
+    const x = pad + (i / (values.length - 1)) * (W - 2 * pad);
+    const y = H - pad - ((values[i] - min) / range) * (H - 2 * pad);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// Donut chart drawer
+function drawDonut(mmReal, mmUnreal, sniperPnl) {
+  const canvas = document.getElementById('pnl-donut');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = 150 * dpr;
+  canvas.height = 150 * dpr;
+  canvas.style.width = '150px';
+  canvas.style.height = '150px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, 150, 150);
+
+  const cx = 75, cy = 75, radius = 60, thickness = 14;
+  const total = Math.abs(mmReal) + Math.abs(mmUnreal) + Math.abs(sniperPnl);
+
+  if (total < 0.01) {
+    // Empty state ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(138,164,192,0.15)';
+    ctx.lineWidth = thickness;
+    ctx.stroke();
     return;
   }
-  pnlData = data;
 
-  const totals = data.map(d => (d.mm_realized || 0) + (d.mm_unrealized || 0) + (d.sniper_pnl || 0));
-  const first = totals[0];
-  const last = totals[totals.length - 1];
-  const delta = last - first;
-  const peak = Math.max(...totals);
-  const trough = Math.min(...totals);
+  const slices = [
+    { value: Math.abs(mmReal), color: '#06d6a0' },
+    { value: Math.abs(mmUnreal), color: '#ffd166' },
+    { value: Math.abs(sniperPnl), color: '#00b4d8' },
+  ].filter(s => s.value > 0);
 
-  const startEl = document.getElementById('pnl-start');
-  startEl.textContent = fmt$(first);
-  startEl.className = 'metric-value ' + pnlClass(first);
+  let angle = -Math.PI / 2;
+  slices.forEach(s => {
+    const sweep = (s.value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, angle, angle + sweep);
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = thickness;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    angle += sweep + 0.04; // tiny gap
+  });
 
-  const curEl = document.getElementById('pnl-current');
-  curEl.textContent = fmt$(last);
-  curEl.className = 'metric-value ' + pnlClass(last);
+  // Update center label
+  const centerVal = document.getElementById('donut-total');
+  if (centerVal) {
+    const totalPnl = mmReal + mmUnreal + sniperPnl;
+    centerVal.textContent = fmt$(totalPnl);
+    centerVal.style.color = totalPnl > 0.01 ? 'var(--green)' : totalPnl < -0.01 ? 'var(--red)' : 'var(--text-0)';
+  }
+}
 
-  const deltaEl = document.getElementById('pnl-delta');
-  deltaEl.textContent = (delta >= 0 ? '+' : '') + fmt$(delta);
-  deltaEl.className = 'metric-value ' + pnlClass(delta);
+// Per-market PnL breakdown
+function updatePerMarketPnl(positions, tokenNames) {
+  const body = document.getElementById('pnl-markets-body');
+  const countEl = document.getElementById('pnl-market-count');
+  if (!positions || Object.keys(positions).length === 0) {
+    body.innerHTML = '<div class="empty-state" style="font-size:11px">No active positions</div>';
+    if (countEl) countEl.textContent = '0 markets';
+    return;
+  }
 
-  const ptEl = document.getElementById('pnl-peak-trough');
-  ptEl.innerHTML = `<span style="color:var(--green)">${fmt$(peak)}</span> / <span style="color:var(--red)">${fmt$(trough)}</span>`;
+  const entries = Object.entries(positions);
+  if (countEl) countEl.textContent = entries.length + ' market' + (entries.length !== 1 ? 's' : '');
 
-  drawPnlChart(data);
-  setupPnlHover();
+  const maxPnl = Math.max(...entries.map(([,p]) => Math.abs(p.upnl || p.unrealized_pnl || 0)), 1);
+
+  body.innerHTML = entries.map(([market, pos]) => {
+    const upnl = pos.upnl || pos.unrealized_pnl || 0;
+    const net = pos.net_position || pos.net || 0;
+    const tid = pos.token_id || market;
+    const fullName = (tokenNames && (tokenNames[tid] || tokenNames[market])) || market;
+    const shortLabel = smartName(fullName, 35);
+    const barW = Math.min(Math.abs(upnl) / maxPnl * 100, 100);
+    const barColor = upnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const barSide = upnl >= 0 ? 'left:0;' : 'right:0;';
+    return `
+      <div class="pnl-market-row" title="${fullName} · ${net >= 0 ? '+' : ''}${net.toFixed(0)} contracts">
+        <span class="pnl-market-name">${shortLabel}</span>
+        <div class="pnl-market-bar-container">
+          <div class="pnl-market-bar-fill" style="width:${barW}%;background:${barColor};${barSide}"></div>
+        </div>
+        <span class="pnl-market-val" style="color:${barColor}">${upnl >= 0 ? '+' : ''}${fmt$(upnl)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// History buffer for sparklines
+let _sparkHistory = { totals: [], rois: [], exposures: [] };
+
+async function refreshPnl() {
+  // Fetch history + current status in parallel
+  const n = pnlRange || 9999;
+  const [histData, statusData, mmData, sniperData, metaData] = await Promise.all([
+    fetchJSON(`/api/history?n=${n}`),
+    fetchJSON('/api/status'),
+    fetchJSON('/api/mm'),
+    fetchJSON('/api/sniper'),
+    fetchJSON('/api/meta'),
+  ]);
+
+  // ─── Hero Stats (Summary) ───
+  const engines = statusData?.engines || {};
+  const mm = engines.market_maker || {};
+  const sn = engines.sniper || {};
+  const me = engines.meta || {};
+  const mmReal = mm.pnl?.realized || 0;
+  const mmUnreal = mm.pnl?.unrealized || 0;
+  const mmPnl = mmReal + mmUnreal;
+  const snPnl = sn.executor?.total_pnl || 0;
+  const totalPnl = mmPnl + snPnl;
+  const roi = totalPnl / 5000 * 100;
+  const mmExp = mm.inventory?.total_exposure || 0;
+  const snExp = sn.executor?.total_exposure || 0;
+  const totalExposure = mmExp + snExp;
+
+  // Total PnL hero
+  const heroTotal = document.getElementById('pnl-hero-total');
+  heroTotal.textContent = fmt$(totalPnl);
+  heroTotal.className = 'pnl-hero-value ' + pnlClass(totalPnl);
+
+  // Delta badge
+  const deltaBadge = document.getElementById('pnl-hero-delta-badge');
+  if (histData && histData.length > 1) {
+    const totals = histData.map(d => (d.mm_realized || 0) + (d.mm_unrealized || 0) + (d.sniper_pnl || 0));
+    const first = totals[0];
+    const delta = totalPnl - first;
+    const pct = first !== 0 ? (delta / Math.abs(first) * 100) : 0;
+    const isUp = delta >= 0;
+    deltaBadge.textContent = (isUp ? '▲' : '▼') + ' ' + Math.abs(pct).toFixed(1) + '%';
+    deltaBadge.className = 'pnl-hero-badge ' + (isUp ? 'up' : delta < -0.01 ? 'down' : 'neutral');
+  }
+
+  // ROI hero
+  const heroRoi = document.getElementById('pnl-hero-roi');
+  heroRoi.textContent = fmtPct(roi);
+  heroRoi.className = 'pnl-hero-value ' + pnlClass(roi);
+
+  // Exposure hero
+  const heroExp = document.getElementById('pnl-hero-exposure');
+  heroExp.textContent = '$' + totalExposure.toFixed(0);
+  const expPct = (totalExposure / 500 * 100).toFixed(0);
+  document.getElementById('pnl-hero-exposure-pct').textContent = expPct + '% of $500 cap';
+
+  // Peak / Trough
+  if (histData && histData.length > 1) {
+    const totals = histData.map(d => (d.mm_realized || 0) + (d.mm_unrealized || 0) + (d.sniper_pnl || 0));
+    const peak = Math.max(...totals);
+    const trough = Math.min(...totals);
+    document.getElementById('pnl-hero-peak').innerHTML =
+      '<span style="color:var(--green)">▲ ' + fmt$(peak) + '</span>';
+    document.getElementById('pnl-hero-trough').innerHTML =
+      '<span style="color:var(--red)">▼ ' + fmt$(trough) + '</span>';
+  }
+
+  // ─── Sparklines ───
+  _sparkHistory.totals.push(totalPnl);
+  _sparkHistory.rois.push(roi);
+  _sparkHistory.exposures.push(totalExposure);
+  // Keep last 30 points
+  if (_sparkHistory.totals.length > 30) _sparkHistory.totals.shift();
+  if (_sparkHistory.rois.length > 30) _sparkHistory.rois.shift();
+  if (_sparkHistory.exposures.length > 30) _sparkHistory.exposures.shift();
+
+  if (_sparkHistory.totals.length >= 2) {
+    drawSparkline('spark-total', _sparkHistory.totals, totalPnl >= 0 ? '#06d6a0' : '#ef476f');
+    drawSparkline('spark-roi', _sparkHistory.rois, roi >= 0 ? '#06d6a0' : '#ef476f');
+    drawSparkline('spark-exposure', _sparkHistory.exposures, '#00b4d8');
+  }
+
+  // ─── Engine Breakdown ───
+  // MM
+  const mmTotalEl = document.getElementById('pnl-mm-total');
+  mmTotalEl.textContent = fmt$(mmPnl);
+  mmTotalEl.className = 'pnl-engine-pnl ' + pnlClass(mmPnl);
+  document.getElementById('pnl-mm-dot').style.background = mm.status === 'running' ? 'var(--green)' : 'var(--text-2)';
+  const mmRealEl = document.getElementById('pnl-mm-realized');
+  mmRealEl.textContent = fmt$(mmReal);
+  mmRealEl.className = 'pnl-engine-detail-val ' + pnlClass(mmReal);
+  const mmUnrealEl = document.getElementById('pnl-mm-unrealized');
+  mmUnrealEl.textContent = fmt$(mmUnreal);
+  mmUnrealEl.className = 'pnl-engine-detail-val ' + pnlClass(mmUnreal);
+  document.getElementById('pnl-mm-markets').textContent = mmData?.active_markets || mm.active_markets || 0;
+  document.getElementById('pnl-mm-fills').textContent = mmData?.fill_count || mm.fill_count || 0;
+  document.getElementById('pnl-mm-exposure').textContent = '$' + mmExp.toFixed(0);
+
+  // Sniper
+  const snTotalEl = document.getElementById('pnl-sn-total');
+  snTotalEl.textContent = fmt$(snPnl);
+  snTotalEl.className = 'pnl-engine-pnl ' + pnlClass(snPnl);
+  document.getElementById('pnl-sn-dot').style.background = sn.status === 'running' ? 'var(--cyan)' : 'var(--text-2)';
+  const snPnlEl = document.getElementById('pnl-sn-pnl');
+  snPnlEl.textContent = fmt$(snPnl);
+  snPnlEl.className = 'pnl-engine-detail-val ' + pnlClass(snPnl);
+  document.getElementById('pnl-sn-winrate').textContent = fmtPct(sn.executor?.win_rate || sniperData?.executor?.win_rate || 0);
+  document.getElementById('pnl-sn-trades').textContent = sniperData?.trades_executed || sn.trades_executed || 0;
+  document.getElementById('pnl-sn-exposure').textContent = '$' + snExp.toFixed(0);
+
+  // Meta
+  const metaCost = metaData?.total_llm_cost || me.total_llm_cost || 0;
+  const metaCostEl = document.getElementById('pnl-meta-cost');
+  metaCostEl.textContent = '-' + fmt$(metaCost, 4);
+  metaCostEl.className = 'pnl-engine-pnl ' + (metaCost > 0 ? 'stat-negative' : 'stat-neutral');
+  document.getElementById('pnl-meta-dot').style.background = me.status === 'running' ? 'var(--blue)' : 'var(--text-2)';
+  document.getElementById('pnl-meta-llm-cost').textContent = fmt$(metaCost, 4);
+  document.getElementById('pnl-meta-runs').textContent = metaData?.run_count || me.run_count || 0;
+  document.getElementById('pnl-meta-adjs').textContent = (metaData?.adjustment_history || me.adjustment_history || []).length;
+  document.getElementById('pnl-meta-next').textContent = (metaData?.next_run_in_hours ?? me.next_run_in_hours) != null
+    ? (metaData?.next_run_in_hours ?? me.next_run_in_hours) + 'h' : '—';
+
+  // ─── Donut Chart ───
+  drawDonut(mmReal, mmUnreal, snPnl);
+  const allocMmReal = document.getElementById('alloc-mm-real');
+  allocMmReal.textContent = fmt$(mmReal);
+  allocMmReal.className = 'pnl-alloc-item-val ' + pnlClass(mmReal);
+  const allocMmUnreal = document.getElementById('alloc-mm-unreal');
+  allocMmUnreal.textContent = fmt$(mmUnreal);
+  allocMmUnreal.className = 'pnl-alloc-item-val ' + pnlClass(mmUnreal);
+  const allocSniper = document.getElementById('alloc-sniper');
+  allocSniper.textContent = fmt$(snPnl);
+  allocSniper.className = 'pnl-alloc-item-val ' + pnlClass(snPnl);
+
+  // ─── Per-Market Breakdown ───
+  const tokenNames = {};
+  if (mmData) {
+    if (mmData.quotes && typeof mmData.quotes === 'object') {
+      Object.entries(mmData.quotes).forEach(([tid, q]) => {
+        if (q.question) tokenNames[tid] = q.question;
+      });
+    }
+    if (mmData.token_names && typeof mmData.token_names === 'object') {
+      Object.entries(mmData.token_names).forEach(([tid, info]) => {
+        if (typeof info === 'object' && info.question) tokenNames[tid] = info.question;
+        else if (typeof info === 'string') tokenNames[tid] = info;
+      });
+    }
+  }
+  updatePerMarketPnl(mm.inventory?.positions || mmData?.inventory?.positions || {}, tokenNames);
+
+  // ─── Main Chart ───
+  if (histData && histData.length >= 2) {
+    pnlData = histData;
+    drawPnlChart(histData);
+    setupPnlHover();
+  }
 }
 
 let _pnlHoverSetup = false;
@@ -2460,6 +3312,8 @@ function drawPnlChart(data) {
   }
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
