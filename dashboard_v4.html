@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PolyEdge v4 — Command Center</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js" crossorigin="anonymous"></script>
 <style>
 :root {
   /* ── Dark Theme (Terminal) ── */
@@ -1592,6 +1593,241 @@ body::after {
 .rg-action-oneside { background: rgba(239,71,111,0.25); color: var(--red); }
 .rg-action-halt_market { background: rgba(239,71,111,0.35); color: #ff4466; }
 .rg-action-halt_all { background: rgba(239,71,111,0.5); color: #fff; }
+
+/* ── Wallet Connect ── */
+.wallet-container {
+  position: relative;
+}
+.wallet-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(232,190,93,0.08);
+  border: 1px solid rgba(232,190,93,0.2);
+  border-radius: 8px;
+  color: var(--text-0);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  height: 36px;
+}
+.wallet-btn:hover {
+  border-color: var(--amber);
+  background: rgba(232,190,93,0.15);
+  box-shadow: 0 0 10px rgba(232,190,93,0.12);
+  transform: scale(1.02);
+}
+.wallet-btn.connected {
+  background: rgba(46,203,113,0.08);
+  border-color: rgba(46,203,113,0.25);
+}
+.wallet-btn.connected:hover {
+  background: rgba(46,203,113,0.15);
+  border-color: var(--green);
+  box-shadow: 0 0 10px rgba(46,203,113,0.12);
+}
+.wallet-btn.wrong-network {
+  background: rgba(231,76,90,0.08);
+  border-color: rgba(231,76,90,0.25);
+}
+.wallet-icon { flex-shrink: 0; }
+
+/* Wallet Dropdown */
+.wallet-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: var(--bg-1);
+  border: 1px solid rgba(232,190,93,0.18);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 200;
+  animation: fadeInUp 0.2s ease-out;
+}
+.wallet-dropdown.show { display: block; }
+.wallet-dropdown-addr {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--amber);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.5px;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.wallet-dropdown-addr:hover { color: var(--text-0); }
+.wallet-dropdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+.wallet-dropdown-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 500;
+}
+.wallet-dropdown-value {
+  font-family: var(--heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+.wallet-disconnect-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(231,76,90,0.08);
+  border: 1px solid rgba(231,76,90,0.2);
+  border-radius: 8px;
+  color: var(--red);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.wallet-disconnect-btn:hover {
+  background: rgba(231,76,90,0.15);
+  border-color: rgba(231,76,90,0.4);
+}
+
+/* Wallet Selector Modal */
+.wallet-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.wallet-modal-box {
+  background: var(--bg-1);
+  border: 1px solid rgba(232,190,93,0.18);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 380px;
+  width: 90%;
+  animation: fadeInUp 0.25s ease-out;
+}
+.wallet-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.wallet-modal-header h3 {
+  font-family: var(--heading);
+  font-size: 16px;
+  color: var(--text-0);
+  margin: 0;
+}
+.wallet-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.2s;
+  font-family: var(--mono);
+}
+.wallet-modal-close:hover { color: var(--text-0); }
+.wallet-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wallet-modal-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(232,190,93,0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-0);
+}
+.wallet-modal-option:hover {
+  background: rgba(232,190,93,0.1);
+  border-color: rgba(232,190,93,0.25);
+  box-shadow: 0 0 8px rgba(232,190,93,0.08);
+}
+.wallet-modal-option img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.wallet-modal-option svg {
+  flex-shrink: 0;
+}
+.wallet-modal-hint {
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: center;
+  margin: 12px 0 0;
+  font-family: var(--sans);
+}
+
+/* Wallet — Light theme */
+[data-theme="light"] .wallet-btn {
+  background: rgba(180,138,44,0.06);
+  border-color: rgba(180,138,44,0.18);
+}
+[data-theme="light"] .wallet-btn:hover {
+  background: rgba(180,138,44,0.12);
+  border-color: var(--amber);
+  box-shadow: 0 0 8px rgba(180,138,44,0.1);
+}
+[data-theme="light"] .wallet-btn.connected {
+  background: rgba(27,143,80,0.06);
+  border-color: rgba(27,143,80,0.2);
+}
+[data-theme="light"] .wallet-dropdown {
+  background: rgba(255,253,249,0.96);
+  box-shadow: 0 4px 20px rgba(80,65,45,0.12);
+  border-color: rgba(180,138,44,0.15);
+}
+[data-theme="light"] .wallet-modal-box {
+  background: rgba(255,253,249,0.98);
+  border-color: rgba(180,138,44,0.15);
+}
+[data-theme="light"] .wallet-modal-option {
+  background: rgba(180,138,44,0.03);
+}
+[data-theme="light"] .wallet-modal-option:hover {
+  background: rgba(180,138,44,0.08);
+}
+
+/* Wallet — Responsive */
+@media (max-width: 768px) {
+  .wallet-btn-text { display: none; }
+  .wallet-btn { padding: 6px 10px; }
+  .wallet-dropdown { right: -40px; min-width: 220px; }
+}
+
 /* ── Theme Toggle Switch (Config) ── */
 .theme-switch {
   position: relative;
@@ -1674,6 +1910,33 @@ body::after {
   </div>
   <div class="header-right">
     <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" onclick="toggleTheme()">🌙</button>
+    <!-- Wallet Connect -->
+    <div class="wallet-container" id="wallet-container">
+      <button class="wallet-btn" id="wallet-btn" onclick="handleWalletClick()">
+        <svg class="wallet-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="20" height="14" rx="2"/>
+          <path d="M2 10h20"/>
+          <circle cx="18" cy="14" r="1.5" fill="currentColor"/>
+        </svg>
+        <span class="wallet-btn-text" id="wallet-btn-text">Connect</span>
+      </button>
+      <div class="wallet-dropdown" id="wallet-dropdown">
+        <div class="wallet-dropdown-addr" id="wallet-dropdown-addr">0x0000...0000</div>
+        <div class="wallet-dropdown-row">
+          <span class="wallet-dropdown-label">USDC</span>
+          <span class="wallet-dropdown-value" id="wallet-usdc-bal">--</span>
+        </div>
+        <div class="wallet-dropdown-row">
+          <span class="wallet-dropdown-label">MATIC</span>
+          <span class="wallet-dropdown-value" id="wallet-matic-bal">--</span>
+        </div>
+        <div class="wallet-dropdown-row">
+          <span class="wallet-dropdown-label">Network</span>
+          <span class="wallet-dropdown-value" id="wallet-network">--</span>
+        </div>
+        <button class="wallet-disconnect-btn" onclick="disconnectWallet()">Disconnect</button>
+      </div>
+    </div>
     <div class="header-stat">
       <div class="header-stat-label">Total PnL</div>
       <div class="header-stat-value stat-neutral" id="total-pnl">$0.00</div>
@@ -2305,6 +2568,381 @@ document.addEventListener('DOMContentLoaded', function() {
     btn.textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
   }
 });
+
+// ═══════════════════════════════════════════════
+// ── Web3 Wallet Connect ──
+// ═══════════════════════════════════════════════
+const POLYGON_CHAIN_ID = 137;
+const POLYGON_CHAIN_ID_HEX = '0x89';
+const POLYGON_RPC = 'https://polygon-rpc.com';
+const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e on Polygon
+const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
+
+let walletState = {
+  connected: false,
+  address: null,
+  provider: null,
+  signer: null,
+  chainId: null,
+  usdcBalance: null,
+  maticBalance: null,
+  refreshTimer: null,
+  rawProvider: null,
+};
+
+// ── EIP-6963 Provider Discovery ──
+(function setupEIP6963() {
+  window.__eip6963Providers = [];
+  window.addEventListener('eip6963:announceProvider', (e) => {
+    if (e.detail && e.detail.provider) {
+      window.__eip6963Providers.push(e.detail);
+    }
+  });
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+})();
+
+function detectWalletProviders() {
+  const providers = [];
+  const seen = new Set();
+
+  // EIP-6963 providers (modern standard)
+  if (window.__eip6963Providers) {
+    for (const p of window.__eip6963Providers) {
+      if (!seen.has(p.info.name)) {
+        seen.add(p.info.name);
+        providers.push({
+          name: p.info.name,
+          icon: p.info.icon || null,
+          provider: p.provider,
+        });
+      }
+    }
+  }
+
+  // Legacy window.ethereum
+  if (window.ethereum) {
+    if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
+      for (const p of window.ethereum.providers) {
+        const name = p.isMetaMask ? 'MetaMask' :
+                     p.isCoinbaseWallet ? 'Coinbase Wallet' :
+                     p.isBraveWallet ? 'Brave Wallet' :
+                     p.isRabby ? 'Rabby' : 'Browser Wallet';
+        if (!seen.has(name)) {
+          seen.add(name);
+          providers.push({ name, icon: null, provider: p });
+        }
+      }
+    } else {
+      const p = window.ethereum;
+      const name = p.isMetaMask ? 'MetaMask' :
+                   p.isCoinbaseWallet ? 'Coinbase Wallet' :
+                   p.isBraveWallet ? 'Brave Wallet' :
+                   p.isRabby ? 'Rabby' : 'Browser Wallet';
+      if (!seen.has(name)) {
+        seen.add(name);
+        providers.push({ name, icon: null, provider: p });
+      }
+    }
+  }
+
+  return providers;
+}
+
+// ── Wallet UI Helpers ──
+function truncateAddress(addr) {
+  if (!addr) return '';
+  return addr.slice(0, 6) + '\u2026' + addr.slice(-4);
+}
+
+function updateWalletUI() {
+  const btn = document.getElementById('wallet-btn');
+  const btnText = document.getElementById('wallet-btn-text');
+  const addrEl = document.getElementById('wallet-dropdown-addr');
+
+  if (walletState.connected && walletState.address) {
+    btnText.textContent = truncateAddress(walletState.address);
+    btn.classList.add('connected');
+    btn.classList.toggle('wrong-network', walletState.chainId !== POLYGON_CHAIN_ID);
+    addrEl.textContent = walletState.address;
+    addrEl.title = 'Click to copy address';
+    addrEl.onclick = () => {
+      navigator.clipboard.writeText(walletState.address);
+      showToast('Address copied', 'success');
+    };
+  } else {
+    resetWalletUI();
+  }
+}
+
+function resetWalletUI() {
+  const btn = document.getElementById('wallet-btn');
+  const btnText = document.getElementById('wallet-btn-text');
+  if (btn) btn.classList.remove('connected', 'wrong-network');
+  if (btnText) btnText.textContent = 'Connect';
+  const dd = document.getElementById('wallet-dropdown');
+  if (dd) dd.classList.remove('show');
+}
+
+// ── Balance Reading ──
+async function refreshWalletBalances() {
+  if (!walletState.connected || !walletState.address) return;
+
+  try {
+    const readProvider = new ethers.JsonRpcProvider(POLYGON_RPC);
+
+    // MATIC balance
+    const maticBal = await readProvider.getBalance(walletState.address);
+    walletState.maticBalance = parseFloat(ethers.formatEther(maticBal));
+
+    // USDC.e balance (6 decimals)
+    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, readProvider);
+    const usdcBal = await usdcContract.balanceOf(walletState.address);
+    walletState.usdcBalance = parseFloat(ethers.formatUnits(usdcBal, 6));
+
+    // Update UI
+    const usdcEl = document.getElementById('wallet-usdc-bal');
+    const maticEl = document.getElementById('wallet-matic-bal');
+    if (usdcEl) usdcEl.textContent = '$' + walletState.usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (maticEl) maticEl.textContent = walletState.maticBalance.toFixed(4);
+
+    // Network status
+    if (walletState.provider) {
+      try {
+        const network = await walletState.provider.getNetwork();
+        walletState.chainId = Number(network.chainId);
+      } catch(e) { /* keep stale chainId */ }
+    }
+    const netEl = document.getElementById('wallet-network');
+    if (netEl) {
+      if (walletState.chainId === POLYGON_CHAIN_ID) {
+        netEl.textContent = 'Polygon';
+        netEl.style.color = 'var(--green)';
+      } else {
+        netEl.textContent = 'Wrong Network';
+        netEl.style.color = 'var(--red)';
+      }
+    }
+
+    // Update button state
+    const btn = document.getElementById('wallet-btn');
+    if (btn) btn.classList.toggle('wrong-network', walletState.chainId !== POLYGON_CHAIN_ID);
+
+  } catch (err) {
+    console.warn('Wallet balance refresh failed:', err.message);
+  }
+}
+
+// ── Network Switching ──
+async function switchToPolygon(rawProvider) {
+  try {
+    await rawProvider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
+    });
+  } catch (switchError) {
+    if (switchError.code === 4902) {
+      try {
+        await rawProvider.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: POLYGON_CHAIN_ID_HEX,
+            chainName: 'Polygon Mainnet',
+            nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+            rpcUrls: ['https://polygon-rpc.com'],
+            blockExplorerUrls: ['https://polygonscan.com'],
+          }],
+        });
+      } catch (addError) {
+        showToast('Failed to add Polygon network', 'error');
+      }
+    }
+  }
+}
+
+// ── Event Listeners ──
+function setupWalletListeners(rawProvider) {
+  if (!rawProvider || !rawProvider.on) return;
+
+  rawProvider.on('chainChanged', (chainIdHex) => {
+    walletState.chainId = parseInt(chainIdHex, 16);
+    updateWalletUI();
+    refreshWalletBalances();
+    if (walletState.chainId !== POLYGON_CHAIN_ID) {
+      showToast('Please switch to Polygon network', 'warning');
+    }
+  });
+
+  rawProvider.on('accountsChanged', (accounts) => {
+    if (!accounts || accounts.length === 0) {
+      disconnectWallet();
+    } else {
+      walletState.address = accounts[0];
+      updateWalletUI();
+      refreshWalletBalances();
+      showToast('Account changed: ' + truncateAddress(accounts[0]), 'success');
+    }
+  });
+
+  rawProvider.on('disconnect', () => {
+    disconnectWallet();
+  });
+}
+
+// ── Connect Flow ──
+async function connectToProvider(walletInfo) {
+  try {
+    const btnText = document.getElementById('wallet-btn-text');
+    if (btnText) btnText.textContent = '...';
+
+    const provider = new ethers.BrowserProvider(walletInfo.provider);
+    const accounts = await provider.send('eth_requestAccounts', []);
+    if (!accounts || accounts.length === 0) throw new Error('No accounts returned');
+
+    const address = accounts[0];
+    const network = await provider.getNetwork();
+    const chainId = Number(network.chainId);
+
+    walletState.provider = provider;
+    walletState.address = address;
+    walletState.chainId = chainId;
+    walletState.connected = true;
+    walletState.rawProvider = walletInfo.provider;
+
+    try { walletState.signer = await provider.getSigner(); } catch(e) { /* read-only ok */ }
+
+    // Persist for auto-reconnect
+    localStorage.setItem('polyedge-wallet-provider', walletInfo.name);
+    localStorage.setItem('polyedge-wallet-connected', 'true');
+
+    updateWalletUI();
+
+    // Check network
+    if (chainId !== POLYGON_CHAIN_ID) {
+      showToast('Wrong network — switching to Polygon...', 'warning');
+      await switchToPolygon(walletInfo.provider);
+    }
+
+    await refreshWalletBalances();
+
+    // Periodic balance refresh (30s)
+    if (walletState.refreshTimer) clearInterval(walletState.refreshTimer);
+    walletState.refreshTimer = setInterval(refreshWalletBalances, 30000);
+
+    setupWalletListeners(walletInfo.provider);
+
+    showToast('Connected: ' + truncateAddress(address), 'success');
+
+  } catch (err) {
+    console.error('Wallet connect error:', err);
+    if (err.code === 4001) {
+      showToast('Connection rejected by user', 'warning');
+    } else {
+      showToast('Failed to connect wallet', 'error');
+    }
+    resetWalletUI();
+  }
+}
+
+function disconnectWallet() {
+  if (walletState.refreshTimer) clearInterval(walletState.refreshTimer);
+  walletState = {
+    connected: false, address: null, provider: null, signer: null,
+    chainId: null, usdcBalance: null, maticBalance: null,
+    refreshTimer: null, rawProvider: null,
+  };
+  localStorage.removeItem('polyedge-wallet-connected');
+  localStorage.removeItem('polyedge-wallet-provider');
+  resetWalletUI();
+
+  // Reset balance displays
+  const usdcEl = document.getElementById('wallet-usdc-bal');
+  const maticEl = document.getElementById('wallet-matic-bal');
+  const netEl = document.getElementById('wallet-network');
+  if (usdcEl) usdcEl.textContent = '--';
+  if (maticEl) maticEl.textContent = '--';
+  if (netEl) { netEl.textContent = '--'; netEl.style.color = ''; }
+
+  showToast('Wallet disconnected', 'warning');
+}
+
+// ── Wallet Modal ──
+function showWalletModal(providers) {
+  const list = document.getElementById('wallet-modal-list');
+  list.innerHTML = '';
+
+  for (const p of providers) {
+    const opt = document.createElement('div');
+    opt.className = 'wallet-modal-option';
+    const iconHtml = p.icon
+      ? '<img src="' + p.icon + '" alt="' + p.name + '">'
+      : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="18" cy="14" r="1.5" fill="var(--amber)"/></svg>';
+    opt.innerHTML = iconHtml + '<span>' + p.name + '</span>';
+    opt.addEventListener('click', () => {
+      closeWalletModal();
+      connectToProvider(p);
+    });
+    list.appendChild(opt);
+  }
+
+  document.getElementById('wallet-modal').style.display = 'flex';
+}
+
+function closeWalletModal() {
+  document.getElementById('wallet-modal').style.display = 'none';
+}
+
+// ── Main Click Handler ──
+function handleWalletClick() {
+  if (walletState.connected) {
+    const dd = document.getElementById('wallet-dropdown');
+    dd.classList.toggle('show');
+    return;
+  }
+
+  const providers = detectWalletProviders();
+
+  if (providers.length === 0) {
+    showToast('No wallet detected. Install MetaMask or Coinbase Wallet.', 'error');
+    return;
+  }
+
+  if (providers.length === 1) {
+    connectToProvider(providers[0]);
+  } else {
+    showWalletModal(providers);
+  }
+}
+
+// ── Auto-Reconnect + Click-Outside ──
+(function walletInit() {
+  // Auto-reconnect on load
+  const wasConnected = localStorage.getItem('polyedge-wallet-connected');
+  const savedProvider = localStorage.getItem('polyedge-wallet-provider');
+
+  if (wasConnected === 'true' && savedProvider) {
+    setTimeout(() => {
+      const providers = detectWalletProviders();
+      const match = providers.find(p => p.name === savedProvider) || providers[0];
+      if (match) connectToProvider(match);
+    }, 800);
+  }
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const container = document.getElementById('wallet-container');
+    if (container && !container.contains(e.target)) {
+      document.getElementById('wallet-dropdown').classList.remove('show');
+    }
+  });
+
+  // Close modal on backdrop click
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'wallet-modal') {
+      closeWalletModal();
+    }
+  });
+})();
+// ═══════════════════════════════════════════════
 
 const API_BASE = '';
 const REFRESH_MS = 5000; // 5 second refresh
@@ -3773,5 +4411,20 @@ setInterval(refresh, REFRESH_MS);
 
 console.log('PolyEdge v4 Dashboard initialized — refreshing every 5s');
 </script>
+
+<!-- Wallet Selector Modal -->
+<div class="wallet-modal-overlay" id="wallet-modal" style="display:none;">
+  <div class="wallet-modal-box">
+    <div class="wallet-modal-header">
+      <h3>Connect Wallet</h3>
+      <button class="wallet-modal-close" onclick="closeWalletModal()">&times;</button>
+    </div>
+    <div class="wallet-modal-list" id="wallet-modal-list">
+      <!-- Populated dynamically by JS -->
+    </div>
+    <p class="wallet-modal-hint">Select a wallet to connect to Polygon network</p>
+  </div>
+</div>
+
 </body>
 </html>
