@@ -2619,11 +2619,18 @@ function detectWalletProviders() {
     }
   }
 
+  // Phantom wallet (exposes window.phantom.ethereum for EVM chains)
+  if (window.phantom && window.phantom.ethereum && !seen.has('Phantom')) {
+    seen.add('Phantom');
+    providers.push({ name: 'Phantom', icon: null, provider: window.phantom.ethereum });
+  }
+
   // Legacy window.ethereum
   if (window.ethereum) {
     if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
       for (const p of window.ethereum.providers) {
-        const name = p.isMetaMask ? 'MetaMask' :
+        const name = p.isPhantom ? 'Phantom' :
+                     p.isMetaMask ? 'MetaMask' :
                      p.isCoinbaseWallet ? 'Coinbase Wallet' :
                      p.isBraveWallet ? 'Brave Wallet' :
                      p.isRabby ? 'Rabby' : 'Browser Wallet';
@@ -2634,7 +2641,8 @@ function detectWalletProviders() {
       }
     } else {
       const p = window.ethereum;
-      const name = p.isMetaMask ? 'MetaMask' :
+      const name = p.isPhantom ? 'Phantom' :
+                   p.isMetaMask ? 'MetaMask' :
                    p.isCoinbaseWallet ? 'Coinbase Wallet' :
                    p.isBraveWallet ? 'Brave Wallet' :
                    p.isRabby ? 'Rabby' : 'Browser Wallet';
