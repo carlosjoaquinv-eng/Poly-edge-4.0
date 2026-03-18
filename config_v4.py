@@ -117,7 +117,17 @@ class Config:
             self.mm.target_half_spread = float(os.environ["MM_HALF_SPREAD"])
         if os.environ.get("MM_KELLY"):
             self.mm.kelly_fraction = float(os.environ["MM_KELLY"])
-        
+        if os.environ.get("MM_MAX_QUOTE_SIZE"):
+            self.mm.max_quote_size = float(os.environ["MM_MAX_QUOTE_SIZE"])
+        if os.environ.get("MM_QUOTE_REFRESH"):
+            self.mm.quote_refresh_secs = float(os.environ["MM_QUOTE_REFRESH"])
+        if os.environ.get("MM_MIN_SPREAD"):
+            self.mm.min_spread_cents = float(os.environ["MM_MIN_SPREAD"])
+        if os.environ.get("MM_MAX_UNITS"):
+            self.mm.max_units_per_market = float(os.environ["MM_MAX_UNITS"])
+        if os.environ.get("MM_MAX_LOSS"):
+            self.mm.max_loss_per_day = float(os.environ["MM_MAX_LOSS"])
+
         # Sniper overrides
         if os.environ.get("SNIPER_MIN_GAP"):
             self.sniper.min_gap_cents = float(os.environ["SNIPER_MIN_GAP"])

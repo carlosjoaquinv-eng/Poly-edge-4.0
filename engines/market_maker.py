@@ -123,20 +123,20 @@ class MMConfig:
     """Market Maker configuration — all tuneable parameters."""
     # Market selection
     min_liquidity: float = 20_000       # $20K minimum market liquidity
-    min_spread_cents: float = 0.5       # 0.5¢ minimum spread (Polymarket spreads are tight)
+    min_spread_cents: float = 0.5       # 0.5¢ minimum spread (we quote wider via target_half_spread)
     max_spread_cents: float = 10.0      # Too wide = toxic flow risk
     min_hours_to_resolution: float = 168  # 7 days minimum
-    max_markets: int = 5                # Max simultaneous markets
-    
+    max_markets: int = 8                # Max simultaneous markets
+
     # Quoting
-    target_half_spread: float = 0.015   # 1.5¢ each side of fair value
+    target_half_spread: float = 0.025   # 2.5¢ each side of fair value
     min_quote_size: float = 10.0        # $10 minimum quote size
-    max_quote_size: float = 30.0        # $30 maximum quote size
-    quote_refresh_secs: float = 45.0    # Re-quote every 45s
-    
+    max_quote_size: float = 50.0        # $50 maximum quote size
+    quote_refresh_secs: float = 30.0    # Re-quote every 30s
+
     # Inventory limits
-    max_position_per_market: float = 50.0   # $50 max per market
-    max_total_inventory: float = 200.0      # $200 total across all markets
+    max_position_per_market: float = 100.0  # $100 max per market
+    max_total_inventory: float = 500.0      # $500 total across all markets
     inventory_skew_factor: float = 1.0      # Base skew aggressiveness (2x original)
     inventory_skew_nonlinear: bool = True   # Quadratic skew: gentle at low inv, aggressive at high
     
@@ -149,7 +149,7 @@ class MMConfig:
     
     # Risk
     kelly_fraction: float = 0.25        # Quarter Kelly for conservative sizing
-    max_loss_per_day: float = 50.0      # Kill switch: stop if daily loss > $50
+    max_loss_per_day: float = 80.0      # Kill switch: stop if daily loss > $80
     fee_rate: float = 0.01              # Polymarket 1% fee per side
     
     # Stealth / randomness
@@ -159,7 +159,7 @@ class MMConfig:
 
     # ── RiskGuard: SAFETY NET (only catches catastrophic failures) ──
     # Native skew handles 95% of inventory management; RiskGuard is the emergency brake
-    max_units_per_market: float = 200.0         # Hard cap on units — strong skew prevents reaching this
+    max_units_per_market: float = 400.0         # Hard cap on units — strong skew prevents reaching this
     inventory_warn_pct: float = 0.70            # 70% → log warning (no action)
     inventory_fadeout_pct: float = 0.85         # 85% → start reducing quote size
     inventory_oneside_pct: float = 0.92         # 92% → only quote reducing side
