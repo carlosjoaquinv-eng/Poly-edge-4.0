@@ -8,6 +8,13 @@ Loads from environment variables with sensible defaults.
 import os
 import logging
 
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    load_dotenv(_env_path)
+except ImportError:
+    pass
+
 from engines.market_maker import MMConfig
 from engines.resolution_sniper_v2 import SniperConfig
 from engines.meta_strategist import MetaConfig
@@ -44,6 +51,9 @@ class Config:
     POLYMARKET_API_KEY: str = ""
     POLYMARKET_API_SECRET: str = ""
     POLYMARKET_API_PASSPHRASE: str = ""
+    POLYMARKET_PROXY_ADDRESS: str = ""   # Proxy wallet for browser-connected wallets
+    SIGNATURE_TYPE: int = 0              # 0 = EOA, 1 = proxy
+    RESIDENTIAL_PROXY: str = ""          # e.g. "http://user:pass@host:port"
     ANTHROPIC_API_KEY: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
@@ -58,7 +68,10 @@ class Config:
     # ── Dashboard ──
     DASHBOARD_PORT: int = 8081          # v4 on 8081, v3.1 stays on 8080
     DASHBOARD_HOST: str = "0.0.0.0"
-    DASHBOARD_PASSWORD: str = ""        # If set, enables HTTP Basic Auth on dashboard
+    DASHBOARD_PASSWORD: str = ""        # DEPRECATED — use auth module instead
+    DASHBOARD_AUTH: bool = True          # Enable login-based auth (Argon2 + JWT)
+    JWT_SECRET: str = ""                 # Auto-generated if empty
+    SESSION_HOURS: int = 72             # Login session duration
     
     # ── Logging ──
     LOG_LEVEL: str = "INFO"
@@ -92,6 +105,9 @@ class Config:
         self.POLYMARKET_API_KEY = os.environ.get("POLYMARKET_API_KEY", "")
         self.POLYMARKET_API_SECRET = os.environ.get("POLYMARKET_API_SECRET", "")
         self.POLYMARKET_API_PASSPHRASE = os.environ.get("POLYMARKET_API_PASSPHRASE", "")
+        self.POLYMARKET_PROXY_ADDRESS = os.environ.get("POLYMARKET_PROXY_ADDRESS", "")
+        self.SIGNATURE_TYPE = int(os.environ.get("SIGNATURE_TYPE", "0"))
+        self.RESIDENTIAL_PROXY = os.environ.get("RESIDENTIAL_PROXY", "")
         self.ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
         self.TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self.TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -102,6 +118,9 @@ class Config:
         # Dashboard
         self.DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", str(self.DASHBOARD_PORT)))
         self.DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", self.DASHBOARD_PASSWORD)
+        self.DASHBOARD_AUTH = os.environ.get("DASHBOARD_AUTH", "true").lower() in ("true", "1", "yes")
+        self.JWT_SECRET = os.environ.get("JWT_SECRET", self.JWT_SECRET)
+        self.SESSION_HOURS = int(os.environ.get("SESSION_HOURS", str(self.SESSION_HOURS)))
 
         # Logging
         self.LOG_LEVEL = os.environ.get("LOG_LEVEL", self.LOG_LEVEL)

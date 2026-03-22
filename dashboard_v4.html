@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PolyEdge v4 — Command Center</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js" crossorigin="anonymous"></script>
+<!-- ethers.js removed — wallet balances now read server-side -->
 <style>
 :root {
   /* ── Dark Theme (Terminal) ── */
@@ -1910,31 +1910,42 @@ body::after {
   </div>
   <div class="header-right">
     <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" onclick="toggleTheme()">🌙</button>
-    <!-- Wallet Connect -->
+    <button class="theme-toggle" id="logout-btn" title="Logout" onclick="handleLogout()" style="font-size:14px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+    <!-- Bot Wallet (server-side, no extension needed) -->
     <div class="wallet-container" id="wallet-container">
-      <button class="wallet-btn" id="wallet-btn" onclick="handleWalletClick()">
+      <button class="wallet-btn connected" id="wallet-btn" onclick="toggleBotWallet()">
         <svg class="wallet-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="6" width="20" height="14" rx="2"/>
           <path d="M2 10h20"/>
           <circle cx="18" cy="14" r="1.5" fill="currentColor"/>
         </svg>
-        <span class="wallet-btn-text" id="wallet-btn-text">Connect</span>
+        <span class="wallet-btn-text" id="wallet-btn-text">Loading...</span>
       </button>
       <div class="wallet-dropdown" id="wallet-dropdown">
-        <div class="wallet-dropdown-addr" id="wallet-dropdown-addr">0x0000...0000</div>
+        <div class="wallet-dropdown-addr" id="wallet-dropdown-addr" style="cursor:pointer" title="Click to copy">—</div>
+        <div style="font-size:10px;color:var(--text-2);margin:-4px 0 8px;text-transform:uppercase;letter-spacing:1px" id="wallet-label">Proxy Wallet</div>
         <div class="wallet-dropdown-row">
-          <span class="wallet-dropdown-label">USDC</span>
-          <span class="wallet-dropdown-value" id="wallet-usdc-bal">--</span>
+          <span class="wallet-dropdown-label">USDC (Proxy)</span>
+          <span class="wallet-dropdown-value" id="wallet-proxy-usdc">--</span>
         </div>
         <div class="wallet-dropdown-row">
-          <span class="wallet-dropdown-label">MATIC</span>
+          <span class="wallet-dropdown-label">USDC (EOA)</span>
+          <span class="wallet-dropdown-value" id="wallet-eoa-usdc">--</span>
+        </div>
+        <div class="wallet-dropdown-row">
+          <span class="wallet-dropdown-label">POL (gas)</span>
           <span class="wallet-dropdown-value" id="wallet-matic-bal">--</span>
         </div>
         <div class="wallet-dropdown-row">
           <span class="wallet-dropdown-label">Network</span>
-          <span class="wallet-dropdown-value" id="wallet-network">--</span>
+          <span class="wallet-dropdown-value" id="wallet-network" style="color:var(--green)">Polygon</span>
         </div>
-        <button class="wallet-disconnect-btn" onclick="disconnectWallet()">Disconnect</button>
+        <div class="wallet-dropdown-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+          <span class="wallet-dropdown-label" style="font-weight:600">Total USDC</span>
+          <span class="wallet-dropdown-value" id="wallet-total-usdc" style="color:var(--green);font-weight:600">--</span>
+        </div>
       </div>
     </div>
     <div class="header-stat">
@@ -1974,7 +1985,7 @@ body::after {
       <div class="metrics" id="system-metrics">
         <div class="metric">
           <div class="metric-label">Bankroll</div>
-          <div class="metric-value" id="sys-bankroll">$5,000</div>
+          <div class="metric-value" id="sys-bankroll">$—</div>
         </div>
         <div class="metric">
           <div class="metric-label">ROI</div>
@@ -2302,7 +2313,7 @@ body::after {
         <div class="pnl-hero-label"><span class="pnl-hero-icon">📈</span> ROI</div>
         <div class="pnl-hero-value stat-neutral" id="pnl-hero-roi">0.00%</div>
         <div class="pnl-hero-sub">
-          <span id="pnl-hero-bankroll">Bankroll: $5,000</span>
+          <span id="pnl-hero-bankroll">Bankroll: $—</span>
         </div>
         <canvas class="pnl-hero-sparkline" id="spark-roi"></canvas>
       </div>
@@ -2516,6 +2527,13 @@ body::after {
   }
 })();
 
+async function handleLogout() {
+  try {
+    await fetch('/api/logout', { method: 'POST' });
+  } catch(e) {}
+  window.location.href = '/login';
+}
+
 function toggleTheme() {
   const html = document.documentElement;
   const btn = document.getElementById('theme-toggle');
@@ -2570,387 +2588,87 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ═══════════════════════════════════════════════
-// ── Web3 Wallet Connect ──
+// ── Bot Wallet (server-side, no extension needed) ──
 // ═══════════════════════════════════════════════
-const POLYGON_CHAIN_ID = 137;
-const POLYGON_CHAIN_ID_HEX = '0x89';
-const POLYGON_RPC = 'https://polygon-rpc.com';
-const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e on Polygon
-const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
-
-let walletState = {
-  connected: false,
-  address: null,
-  provider: null,
-  signer: null,
-  chainId: null,
-  usdcBalance: null,
-  maticBalance: null,
-  refreshTimer: null,
-  rawProvider: null,
+let botWallet = {
+  eoa: '',
+  proxy: '',
+  proxyUsdc: 0,
+  eoaUsdc: 0,
+  matic: 0,
+  totalUsdc: 0,
+  loaded: false,
 };
 
-// ── EIP-6963 Provider Discovery ──
-(function setupEIP6963() {
-  window.__eip6963Providers = [];
-  window.addEventListener('eip6963:announceProvider', (e) => {
-    if (e.detail && e.detail.provider) {
-      window.__eip6963Providers.push(e.detail);
-    }
-  });
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
-})();
+function truncAddr(a) { return a ? a.slice(0,6) + '\u2026' + a.slice(-4) : ''; }
 
-function detectWalletProviders() {
-  const providers = [];
-  const seen = new Set();
-
-  // EIP-6963 providers (modern standard)
-  if (window.__eip6963Providers) {
-    for (const p of window.__eip6963Providers) {
-      if (!seen.has(p.info.name)) {
-        seen.add(p.info.name);
-        providers.push({
-          name: p.info.name,
-          icon: p.info.icon || null,
-          provider: p.provider,
-        });
-      }
-    }
-  }
-
-  // Phantom wallet (exposes window.phantom.ethereum for EVM chains)
-  if (window.phantom && window.phantom.ethereum && !seen.has('Phantom')) {
-    seen.add('Phantom');
-    providers.push({ name: 'Phantom', icon: null, provider: window.phantom.ethereum });
-  }
-
-  // Legacy window.ethereum
-  if (window.ethereum) {
-    if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-      for (const p of window.ethereum.providers) {
-        const name = p.isPhantom ? 'Phantom' :
-                     p.isMetaMask ? 'MetaMask' :
-                     p.isCoinbaseWallet ? 'Coinbase Wallet' :
-                     p.isBraveWallet ? 'Brave Wallet' :
-                     p.isRabby ? 'Rabby' : 'Browser Wallet';
-        if (!seen.has(name)) {
-          seen.add(name);
-          providers.push({ name, icon: null, provider: p });
-        }
-      }
-    } else {
-      const p = window.ethereum;
-      const name = p.isPhantom ? 'Phantom' :
-                   p.isMetaMask ? 'MetaMask' :
-                   p.isCoinbaseWallet ? 'Coinbase Wallet' :
-                   p.isBraveWallet ? 'Brave Wallet' :
-                   p.isRabby ? 'Rabby' : 'Browser Wallet';
-      if (!seen.has(name)) {
-        seen.add(name);
-        providers.push({ name, icon: null, provider: p });
-      }
-    }
-  }
-
-  return providers;
-}
-
-// ── Wallet UI Helpers ──
-function truncateAddress(addr) {
-  if (!addr) return '';
-  return addr.slice(0, 6) + '\u2026' + addr.slice(-4);
-}
-
-function updateWalletUI() {
-  const btn = document.getElementById('wallet-btn');
-  const btnText = document.getElementById('wallet-btn-text');
-  const addrEl = document.getElementById('wallet-dropdown-addr');
-
-  if (walletState.connected && walletState.address) {
-    btnText.textContent = truncateAddress(walletState.address);
-    btn.classList.add('connected');
-    btn.classList.toggle('wrong-network', walletState.chainId !== POLYGON_CHAIN_ID);
-    addrEl.textContent = walletState.address;
-    addrEl.title = 'Click to copy address';
-    addrEl.onclick = () => {
-      navigator.clipboard.writeText(walletState.address);
-      showToast('Address copied', 'success');
-    };
-  } else {
-    resetWalletUI();
-  }
-}
-
-function resetWalletUI() {
-  const btn = document.getElementById('wallet-btn');
-  const btnText = document.getElementById('wallet-btn-text');
-  if (btn) btn.classList.remove('connected', 'wrong-network');
-  if (btnText) btnText.textContent = 'Connect';
+function toggleBotWallet() {
   const dd = document.getElementById('wallet-dropdown');
-  if (dd) dd.classList.remove('show');
+  dd.classList.toggle('show');
 }
 
-// ── Balance Reading ──
-async function refreshWalletBalances() {
-  if (!walletState.connected || !walletState.address) return;
-
+async function refreshBotWallet() {
   try {
-    const readProvider = new ethers.JsonRpcProvider(POLYGON_RPC);
+    const res = await fetch('/api/wallet');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
 
-    // MATIC balance
-    const maticBal = await readProvider.getBalance(walletState.address);
-    walletState.maticBalance = parseFloat(ethers.formatEther(maticBal));
-
-    // USDC.e balance (6 decimals)
-    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, readProvider);
-    const usdcBal = await usdcContract.balanceOf(walletState.address);
-    walletState.usdcBalance = parseFloat(ethers.formatUnits(usdcBal, 6));
+    botWallet.eoa = data.eoa || '';
+    botWallet.proxy = data.proxy || '';
+    botWallet.proxyUsdc = data.balances?.proxy_usdc || 0;
+    botWallet.eoaUsdc = data.balances?.eoa_usdc || 0;
+    botWallet.matic = data.balances?.eoa_matic || 0;
+    botWallet.totalUsdc = data.balances?.total_usdc || 0;
+    botWallet.loaded = true;
 
     // Update UI
-    const usdcEl = document.getElementById('wallet-usdc-bal');
-    const maticEl = document.getElementById('wallet-matic-bal');
-    if (usdcEl) usdcEl.textContent = '$' + walletState.usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (maticEl) maticEl.textContent = walletState.maticBalance.toFixed(4);
-
-    // Network status
-    if (walletState.provider) {
-      try {
-        const network = await walletState.provider.getNetwork();
-        walletState.chainId = Number(network.chainId);
-      } catch(e) { /* keep stale chainId */ }
-    }
-    const netEl = document.getElementById('wallet-network');
-    if (netEl) {
-      if (walletState.chainId === POLYGON_CHAIN_ID) {
-        netEl.textContent = 'Polygon';
-        netEl.style.color = 'var(--green)';
-      } else {
-        netEl.textContent = 'Wrong Network';
-        netEl.style.color = 'var(--red)';
-      }
-    }
-
-    // Update button state
-    const btn = document.getElementById('wallet-btn');
-    if (btn) btn.classList.toggle('wrong-network', walletState.chainId !== POLYGON_CHAIN_ID);
-
-  } catch (err) {
-    console.warn('Wallet balance refresh failed:', err.message);
-  }
-}
-
-// ── Network Switching ──
-async function switchToPolygon(rawProvider) {
-  try {
-    await rawProvider.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
-    });
-  } catch (switchError) {
-    if (switchError.code === 4902) {
-      try {
-        await rawProvider.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: POLYGON_CHAIN_ID_HEX,
-            chainName: 'Polygon Mainnet',
-            nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-            rpcUrls: ['https://polygon-rpc.com'],
-            blockExplorerUrls: ['https://polygonscan.com'],
-          }],
-        });
-      } catch (addError) {
-        showToast('Failed to add Polygon network', 'error');
-      }
-    }
-  }
-}
-
-// ── Event Listeners ──
-function setupWalletListeners(rawProvider) {
-  if (!rawProvider || !rawProvider.on) return;
-
-  rawProvider.on('chainChanged', (chainIdHex) => {
-    walletState.chainId = parseInt(chainIdHex, 16);
-    updateWalletUI();
-    refreshWalletBalances();
-    if (walletState.chainId !== POLYGON_CHAIN_ID) {
-      showToast('Please switch to Polygon network', 'warning');
-    }
-  });
-
-  rawProvider.on('accountsChanged', (accounts) => {
-    if (!accounts || accounts.length === 0) {
-      disconnectWallet();
-    } else {
-      walletState.address = accounts[0];
-      updateWalletUI();
-      refreshWalletBalances();
-      showToast('Account changed: ' + truncateAddress(accounts[0]), 'success');
-    }
-  });
-
-  rawProvider.on('disconnect', () => {
-    disconnectWallet();
-  });
-}
-
-// ── Connect Flow ──
-async function connectToProvider(walletInfo) {
-  try {
     const btnText = document.getElementById('wallet-btn-text');
-    if (btnText) btnText.textContent = '...';
+    const addrEl = document.getElementById('wallet-dropdown-addr');
+    const labelEl = document.getElementById('wallet-label');
 
-    const provider = new ethers.BrowserProvider(walletInfo.provider);
-    const accounts = await provider.send('eth_requestAccounts', []);
-    if (!accounts || accounts.length === 0) throw new Error('No accounts returned');
-
-    const address = accounts[0];
-    const network = await provider.getNetwork();
-    const chainId = Number(network.chainId);
-
-    walletState.provider = provider;
-    walletState.address = address;
-    walletState.chainId = chainId;
-    walletState.connected = true;
-    walletState.rawProvider = walletInfo.provider;
-
-    try { walletState.signer = await provider.getSigner(); } catch(e) { /* read-only ok */ }
-
-    // Persist for auto-reconnect
-    localStorage.setItem('polyedge-wallet-provider', walletInfo.name);
-    localStorage.setItem('polyedge-wallet-connected', 'true');
-
-    updateWalletUI();
-
-    // Check network
-    if (chainId !== POLYGON_CHAIN_ID) {
-      showToast('Wrong network — switching to Polygon...', 'warning');
-      await switchToPolygon(walletInfo.provider);
+    if (botWallet.proxy) {
+      btnText.textContent = truncAddr(botWallet.proxy);
+      addrEl.textContent = botWallet.proxy;
+      addrEl.onclick = () => { navigator.clipboard.writeText(botWallet.proxy); };
+      labelEl.textContent = 'Proxy Wallet (Polymarket)';
+    } else if (botWallet.eoa) {
+      btnText.textContent = truncAddr(botWallet.eoa);
+      addrEl.textContent = botWallet.eoa;
+      addrEl.onclick = () => { navigator.clipboard.writeText(botWallet.eoa); };
+      labelEl.textContent = 'EOA Wallet';
     }
 
-    await refreshWalletBalances();
+    const fmt = (v) => '$' + v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    document.getElementById('wallet-proxy-usdc').textContent = fmt(botWallet.proxyUsdc);
+    document.getElementById('wallet-eoa-usdc').textContent = fmt(botWallet.eoaUsdc);
+    document.getElementById('wallet-matic-bal').textContent = botWallet.matic.toFixed(4);
+    document.getElementById('wallet-total-usdc').textContent = fmt(botWallet.totalUsdc);
 
-    // Periodic balance refresh (30s)
-    if (walletState.refreshTimer) clearInterval(walletState.refreshTimer);
-    walletState.refreshTimer = setInterval(refreshWalletBalances, 30000);
-
-    setupWalletListeners(walletInfo.provider);
-
-    showToast('Connected: ' + truncateAddress(address), 'success');
-
-  } catch (err) {
-    console.error('Wallet connect error:', err);
-    if (err.code === 4001) {
-      showToast('Connection rejected by user', 'warning');
-    } else {
-      showToast('Failed to connect wallet', 'error');
-    }
-    resetWalletUI();
+  } catch(e) {
+    console.warn('Bot wallet refresh failed:', e.message);
   }
 }
 
-function disconnectWallet() {
-  if (walletState.refreshTimer) clearInterval(walletState.refreshTimer);
-  walletState = {
-    connected: false, address: null, provider: null, signer: null,
-    chainId: null, usdcBalance: null, maticBalance: null,
-    refreshTimer: null, rawProvider: null,
-  };
-  localStorage.removeItem('polyedge-wallet-connected');
-  localStorage.removeItem('polyedge-wallet-provider');
-  resetWalletUI();
-
-  // Reset balance displays
-  const usdcEl = document.getElementById('wallet-usdc-bal');
-  const maticEl = document.getElementById('wallet-matic-bal');
-  const netEl = document.getElementById('wallet-network');
-  if (usdcEl) usdcEl.textContent = '--';
-  if (maticEl) maticEl.textContent = '--';
-  if (netEl) { netEl.textContent = '--'; netEl.style.color = ''; }
-
-  showToast('Wallet disconnected', 'warning');
-}
-
-// ── Wallet Modal ──
-function showWalletModal(providers) {
-  const list = document.getElementById('wallet-modal-list');
-  list.innerHTML = '';
-
-  for (const p of providers) {
-    const opt = document.createElement('div');
-    opt.className = 'wallet-modal-option';
-    const iconHtml = p.icon
-      ? '<img src="' + p.icon + '" alt="' + p.name + '">'
-      : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="18" cy="14" r="1.5" fill="var(--amber)"/></svg>';
-    opt.innerHTML = iconHtml + '<span>' + p.name + '</span>';
-    opt.addEventListener('click', () => {
-      closeWalletModal();
-      connectToProvider(p);
-    });
-    list.appendChild(opt);
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  const container = document.getElementById('wallet-container');
+  if (container && !container.contains(e.target)) {
+    document.getElementById('wallet-dropdown').classList.remove('show');
   }
+});
 
-  document.getElementById('wallet-modal').style.display = 'flex';
-}
-
-function closeWalletModal() {
-  document.getElementById('wallet-modal').style.display = 'none';
-}
-
-// ── Main Click Handler ──
-function handleWalletClick() {
-  if (walletState.connected) {
-    const dd = document.getElementById('wallet-dropdown');
-    dd.classList.toggle('show');
-    return;
-  }
-
-  const providers = detectWalletProviders();
-
-  if (providers.length === 0) {
-    showToast('No wallet detected. Install MetaMask or Coinbase Wallet.', 'error');
-    return;
-  }
-
-  if (providers.length === 1) {
-    connectToProvider(providers[0]);
-  } else {
-    showWalletModal(providers);
-  }
-}
-
-// ── Auto-Reconnect + Click-Outside ──
-(function walletInit() {
-  // Auto-reconnect on load
-  const wasConnected = localStorage.getItem('polyedge-wallet-connected');
-  const savedProvider = localStorage.getItem('polyedge-wallet-provider');
-
-  if (wasConnected === 'true' && savedProvider) {
-    setTimeout(() => {
-      const providers = detectWalletProviders();
-      const match = providers.find(p => p.name === savedProvider) || providers[0];
-      if (match) connectToProvider(match);
-    }, 800);
-  }
-
-  // Close dropdown on outside click
-  document.addEventListener('click', (e) => {
-    const container = document.getElementById('wallet-container');
-    if (container && !container.contains(e.target)) {
-      document.getElementById('wallet-dropdown').classList.remove('show');
-    }
-  });
-
-  // Close modal on backdrop click
-  document.addEventListener('click', (e) => {
-    if (e.target && e.target.id === 'wallet-modal') {
-      closeWalletModal();
-    }
-  });
+// Initial load + refresh every 30s
+(function botWalletInit() {
+  refreshBotWallet();
+  setInterval(refreshBotWallet, 30000);
 })();
 // ═══════════════════════════════════════════════
+// (Old browser wallet code removed — using server-side bot wallet)
+// ═══════════════════════════════════════════════
+
+// (Old browser wallet code removed)
+
 
 const API_BASE = '';
 const REFRESH_MS = 5000; // 5 second refresh
@@ -2962,6 +2680,7 @@ let state = {
   sniper: null,
   meta: null,
   eventLog: [],
+  bankroll: 0,
 };
 
 // ── Fetch Helpers ──
@@ -3106,9 +2825,10 @@ function updateSystem(data) {
   const mmPnl = (mm.pnl?.realized || 0) + (mm.pnl?.unrealized || 0);
   const snPnl = sn.executor?.total_pnl || 0;
   const totalPnl = mmPnl + snPnl;
-  const roi = totalPnl / 5000 * 100;
+  const bankroll = state.bankroll || 5000;
+  const roi = bankroll > 0 ? (totalPnl / bankroll * 100) : 0;
 
-  document.getElementById('sys-bankroll').textContent = '$5,000';
+  document.getElementById('sys-bankroll').textContent = '$' + bankroll.toLocaleString();
   const roiEl = document.getElementById('sys-roi');
   roiEl.textContent = fmtPct(roi);
   roiEl.className = 'metric-value ' + pnlClass(roi);
@@ -3841,7 +3561,8 @@ async function refreshPnl() {
   const mmPnl = mmReal + mmUnreal;
   const snPnl = sn.executor?.total_pnl || 0;
   const totalPnl = mmPnl + snPnl;
-  const roi = totalPnl / 5000 * 100;
+  const bankroll = state.bankroll || 5000;
+  const roi = bankroll > 0 ? (totalPnl / bankroll * 100) : 0;
   const mmExp = mm.inventory?.total_exposure || 0;
   const snExp = sn.executor?.total_exposure || 0;
   const totalExposure = mmExp + snExp;
@@ -3862,6 +3583,9 @@ async function refreshPnl() {
     deltaBadge.textContent = (isUp ? '▲' : '▼') + ' ' + Math.abs(pct).toFixed(1) + '%';
     deltaBadge.className = 'pnl-hero-badge ' + (isUp ? 'up' : delta < -0.01 ? 'down' : 'neutral');
   }
+
+  // Bankroll label
+  document.getElementById('pnl-hero-bankroll').textContent = 'Bankroll: $' + bankroll.toLocaleString();
 
   // ROI hero
   const heroRoi = document.getElementById('pnl-hero-roi');
@@ -4384,8 +4108,14 @@ function showToast(msg, type) {
 
 // ── Main Refresh Loop ──
 async function refresh() {
-  const statusData = await fetchJSON('/api/status');
+  const [statusData, configData] = await Promise.all([
+    fetchJSON('/api/status'),
+    fetchJSON('/api/config'),
+  ]);
   state.status = statusData;
+  if (configData?.structured?.bankroll) {
+    state.bankroll = configData.structured.bankroll;
+  }
   updateHeader(statusData);
 
   if (activeTab === 'dashboard') {
@@ -4420,19 +4150,7 @@ setInterval(refresh, REFRESH_MS);
 console.log('PolyEdge v4 Dashboard initialized — refreshing every 5s');
 </script>
 
-<!-- Wallet Selector Modal -->
-<div class="wallet-modal-overlay" id="wallet-modal" style="display:none;">
-  <div class="wallet-modal-box">
-    <div class="wallet-modal-header">
-      <h3>Connect Wallet</h3>
-      <button class="wallet-modal-close" onclick="closeWalletModal()">&times;</button>
-    </div>
-    <div class="wallet-modal-list" id="wallet-modal-list">
-      <!-- Populated dynamically by JS -->
-    </div>
-    <p class="wallet-modal-hint">Select a wallet to connect to Polygon network</p>
-  </div>
-</div>
+<!-- Wallet modal removed — using server-side bot wallet -->
 
 </body>
 </html>

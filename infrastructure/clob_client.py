@@ -51,6 +51,9 @@ class CLOBClient:
             clob_cfg.api_key = self.config.POLYMARKET_API_KEY
             clob_cfg.api_secret = self.config.POLYMARKET_API_SECRET
             clob_cfg.api_passphrase = self.config.POLYMARKET_API_PASSPHRASE
+            clob_cfg.signature_type = self.config.SIGNATURE_TYPE
+            clob_cfg.funder = self.config.POLYMARKET_PROXY_ADDRESS
+            clob_cfg.residential_proxy = getattr(self.config, 'RESIDENTIAL_PROXY', '')
             clob_cfg.paper_mode = self.config.PAPER_MODE
 
             self._v4_client = CLOBClientV4(clob_cfg)

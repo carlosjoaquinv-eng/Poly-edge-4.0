@@ -13,6 +13,7 @@ import logging
 from engines.market_maker import MarketMakerEngine
 from engines.resolution_sniper_v2 import ResolutionSniperV2
 from engines.meta_strategist import MetaStrategist
+from api.auth import AuthManager
 
 # Project root is one level up from api/
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,53 +45,36 @@ class DashboardAPI:
         self.logger = logging.getLogger("polyedge.dashboard")
         self._started_at = time.time()
 
-    def _make_auth_middleware(self):
-        """Create HTTP Basic Auth middleware. /health is always public."""
-        from aiohttp import web
-        import base64
-
-        password = self.config.DASHBOARD_PASSWORD
-
-        @web.middleware
-        async def auth_middleware(request, handler):
-            # /health is always public (for uptime monitors)
-            if request.path == "/health":
-                return await handler(request)
-
-            # If no password configured, skip auth
-            if not password:
-                return await handler(request)
-
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Basic "):
-                try:
-                    decoded = base64.b64decode(auth_header[6:]).decode()
-                    _, pwd = decoded.split(":", 1)
-                    if pwd == password:
-                        return await handler(request)
-                except Exception:
-                    pass
-
-            return web.Response(
-                status=401,
-                headers={"WWW-Authenticate": 'Basic realm="PolyEdge v4"'},
-                text="Unauthorized",
-            )
-
-        return auth_middleware
-
     async def start(self):
         """Start the dashboard HTTP server."""
         from aiohttp import web
 
         middlewares = []
-        if self.config.DASHBOARD_PASSWORD:
-            middlewares.append(self._make_auth_middleware())
-            self.logger.info("Dashboard auth ENABLED (password set)")
+
+        # ── Auth setup ──
+        self.auth_manager = None
+        if getattr(self.config, "DASHBOARD_AUTH", True):
+            data_dir = os.path.join(PROJECT_ROOT, self.config.DATA_DIR)
+            jwt_secret = getattr(self.config, "JWT_SECRET", "") or None
+            session_hours = getattr(self.config, "SESSION_HOURS", 72)
+            self.auth_manager = AuthManager(
+                data_dir=data_dir,
+                jwt_secret=jwt_secret,
+                session_hours=session_hours,
+            )
+            middlewares.append(self.auth_manager.make_middleware())
+            if self.auth_manager.has_users():
+                self.logger.info("Dashboard auth ENABLED (login required)")
+            else:
+                self.logger.info("Dashboard auth ENABLED (first visit will create account)")
         else:
-            self.logger.warning("Dashboard auth DISABLED — set DASHBOARD_PASSWORD to protect it")
+            self.logger.warning("Dashboard auth DISABLED — set DASHBOARD_AUTH=true to protect it")
 
         app = web.Application(middlewares=middlewares)
+
+        # Auth routes (login page, login API, logout)
+        if self.auth_manager:
+            self.auth_manager.register_routes(app)
 
         # API endpoints
         app.router.add_get("/api/status", self._handle_status)
@@ -107,6 +91,7 @@ class DashboardAPI:
         app.router.add_get("/api/riskguard", self._handle_riskguard)
         app.router.add_post("/api/riskguard/resume", self._handle_riskguard_resume)
         app.router.add_get("/health", self._handle_health)
+        app.router.add_get("/api/wallet", self._handle_wallet)
 
         # Serve dashboard HTML at root
         app.router.add_get("/", self._handle_dashboard)
@@ -160,11 +145,20 @@ class DashboardAPI:
     async def _handle_config(self, request):
         from aiohttp import web
         cfg = self.config
+        # Use live CLOB balance when available, fall back to config
+        bankroll = cfg.BANKROLL
+        if not cfg.PAPER_MODE and self.clob:
+            try:
+                live_bal = await self.clob.get_balance()
+                if live_bal and live_bal > 0:
+                    bankroll = round(live_bal, 2)
+            except Exception:
+                pass
         return web.json_response({
             "text": cfg.summary(),
             "structured": {
                 "mode": "PAPER" if cfg.PAPER_MODE else "LIVE",
-                "bankroll": cfg.BANKROLL,
+                "bankroll": bankroll,
                 "mm": {
                     "max_markets": cfg.mm.max_markets,
                     "max_position_per_market": cfg.mm.max_position_per_market,
@@ -212,18 +206,37 @@ class DashboardAPI:
 
     async def _handle_trades(self, request):
         from aiohttp import web
-        if not self.sniper:
-            return web.json_response({"active": [], "completed": [], "summary": {}})
-        stats = self.sniper.executor.get_stats()
-        executor_state = self.sniper.executor.save_state()
-        return web.json_response({
-            "active": stats.get("active_positions", []),
-            "completed": executor_state.get("completed_trades", []),
-            "summary": {
+        # Collect trades from both MM and Sniper
+        mm_trades = []
+        if self.mm:
+            mm_stats = self.mm.get_stats()
+            mm_trades = mm_stats.get("trade_log", [])
+
+        sniper_trades = []
+        sniper_summary = {}
+        if self.sniper:
+            stats = self.sniper.executor.get_stats()
+            executor_state = self.sniper.executor.save_state()
+            sniper_trades = executor_state.get("completed_trades", [])
+            sniper_summary = {
                 "total_trades": stats.get("completed_trades", 0),
                 "win_rate": stats.get("win_rate", 0),
                 "total_pnl": stats.get("total_pnl", 0),
                 "avg_pnl": stats.get("avg_pnl", 0),
+            }
+
+        # Merge and sort all trades by time (most recent first)
+        all_trades = mm_trades + sniper_trades
+        all_trades.sort(key=lambda t: t.get("time", t.get("fill_time", 0)), reverse=True)
+
+        return web.json_response({
+            "active": [],
+            "completed": all_trades[:100],
+            "summary": {
+                "total_trades": len(all_trades),
+                "mm_trades": len(mm_trades),
+                "sniper_trades": len(sniper_trades),
+                **sniper_summary,
             }
         })
 
@@ -304,6 +317,106 @@ class DashboardAPI:
     async def _handle_health(self, request):
         from aiohttp import web
         return web.json_response({"status": "ok", "version": self.config.VERSION})
+
+    async def _handle_wallet(self, request):
+        """Return bot wallet balances read on-chain (no browser extension needed)."""
+        from aiohttp import web
+        import asyncio
+
+        proxy = getattr(self.config, "POLYMARKET_PROXY_ADDRESS", "")
+        eoa = getattr(self.config, "PRIVATE_KEY", "")
+
+        # Derive EOA address from private key
+        eoa_address = ""
+        if eoa:
+            try:
+                from eth_account import Account
+                eoa_address = Account.from_key(eoa).address
+            except Exception:
+                pass
+
+        if not proxy and not eoa_address:
+            return web.json_response({
+                "error": "No wallet configured",
+                "eoa": "", "proxy": "",
+            })
+
+        # Read balances on-chain via JSON-RPC
+        rpc_url = "https://polygon-bor-rpc.publicnode.com"
+        usdc_contract = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"  # USDC.e on Polygon
+
+        async def read_balance(address):
+            """Read USDC.e balance for an address via eth_call."""
+            if not address:
+                return 0.0
+            try:
+                import aiohttp as aio
+                # balanceOf(address) selector = 0x70a08231
+                padded = address.lower().replace("0x", "").zfill(64)
+                call_data = "0x70a08231" + padded
+                payload = {
+                    "jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                    "params": [{"to": usdc_contract, "data": call_data}, "latest"]
+                }
+                async with aio.ClientSession() as session:
+                    async with session.post(rpc_url, json=payload, timeout=aio.ClientTimeout(total=5)) as resp:
+                        result = await resp.json()
+                        hex_val = result.get("result", "0x0")
+                        return int(hex_val, 16) / 1e6  # USDC has 6 decimals
+            except Exception as e:
+                self.logger.warning(f"Failed to read balance for {address[:10]}: {e}")
+                return 0.0
+
+        async def read_matic(address):
+            """Read MATIC/POL balance."""
+            if not address:
+                return 0.0
+            try:
+                import aiohttp as aio
+                payload = {
+                    "jsonrpc": "2.0", "id": 1, "method": "eth_getBalance",
+                    "params": [address, "latest"]
+                }
+                async with aio.ClientSession() as session:
+                    async with session.post(rpc_url, json=payload, timeout=aio.ClientTimeout(total=5)) as resp:
+                        result = await resp.json()
+                        hex_val = result.get("result", "0x0")
+                        return int(hex_val, 16) / 1e18
+            except Exception as e:
+                self.logger.warning(f"Failed to read MATIC for {address[:10]}: {e}")
+                return 0.0
+
+        # Read all balances concurrently
+        proxy_usdc, eoa_usdc, proxy_matic, eoa_matic = await asyncio.gather(
+            read_balance(proxy),
+            read_balance(eoa_address),
+            read_matic(proxy),
+            read_matic(eoa_address),
+        )
+
+        # CLOB balance (what Polymarket API reports)
+        clob_balance = 0.0
+        if self.clob:
+            try:
+                clob_balance = await self.clob.get_balance()
+            except Exception:
+                pass
+
+        return web.json_response({
+            "eoa": eoa_address,
+            "proxy": proxy,
+            "mode": "PAPER" if self.config.PAPER_MODE else "LIVE",
+            "balances": {
+                "proxy_usdc": round(proxy_usdc, 2),
+                "eoa_usdc": round(eoa_usdc, 2),
+                "proxy_matic": round(proxy_matic, 4),
+                "eoa_matic": round(eoa_matic, 4),
+                "clob_reported": round(clob_balance, 2),
+                "total_usdc": round(proxy_usdc + eoa_usdc, 2),
+            },
+            "network": "Polygon",
+            "chain_id": 137,
+        })
 
     async def _handle_history(self, request):
         from aiohttp import web

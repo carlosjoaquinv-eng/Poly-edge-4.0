@@ -28,6 +28,7 @@ Usage:
 
 import asyncio
 import aiohttp
+import httpx
 import time
 import os
 import logging
@@ -55,7 +56,14 @@ class CLOBConfig:
     api_key: str = ""
     api_secret: str = ""
     api_passphrase: str = ""
-    
+
+    # Proxy wallet (for browser-connected wallets)
+    signature_type: int = 0          # 0 = EOA, 1 = proxy wallet
+    funder: str = ""                 # Proxy wallet address (required when signature_type=1)
+
+    # Residential proxy (to bypass datacenter IP blocks)
+    residential_proxy: str = ""      # e.g. "http://user:pass@host:port"
+
     # Paper mode
     paper_mode: bool = True
     
@@ -261,14 +269,33 @@ class CLOBClientV4:
                 )
             
             # Initialize client with private key for EIP-712 signing
-            self._client = ClobClient(
+            sig_type = self.config.signature_type
+            funder = self.config.funder or None
+
+            client_kwargs = dict(
                 host=self.config.host,
                 chain_id=self.config.chain_id,
                 key=self.config.private_key,
                 creds=creds,
-                signature_type=0,  # EOA signature
+                signature_type=sig_type,
             )
-            
+            if sig_type in (1, 2) and funder:
+                client_kwargs["funder"] = funder
+                logger.info(f"Using proxy wallet (signature_type={sig_type}) funder={funder[:10]}...")
+
+            self._client = ClobClient(**client_kwargs)
+
+            # Inject residential proxy into py_clob_client's HTTP layer
+            if self.config.residential_proxy:
+                import py_clob_client.http_helpers.helpers as clob_http
+                proxy_url = self.config.residential_proxy
+                clob_http._http_client = httpx.Client(
+                    http2=True,
+                    proxy=proxy_url,
+                    timeout=30.0,
+                )
+                logger.info(f"Residential proxy injected: {proxy_url.split('@')[-1] if '@' in proxy_url else 'configured'}")
+
             # If no API creds, derive them
             if not creds:
                 logger.info("Deriving API credentials from private key...")
@@ -399,7 +426,12 @@ class CLOBClientV4:
         
         try:
             if self._client and not self.config.paper_mode:
-                price = await asyncio.to_thread(self._client.get_price, token_id)
+                price = await asyncio.to_thread(self._client.get_price, token_id, "buy")
+                if price is None:
+                    return None
+                # py_clob_client may return dict {"price": "0.123"} or string
+                if isinstance(price, dict):
+                    price = price.get("price", 0)
                 return float(price) if price else None
             
             async with self._session.get(
@@ -558,9 +590,15 @@ class CLOBClientV4:
             
         except Exception as e:
             self._error_count += 1
-            logger.error(f"place_limit_order error: {e}", exc_info=True)
+            err_str = str(e)
+            if "not enough balance" in err_str:
+                logger.warning(f"⛔ Order rejected: insufficient balance ({side} {size:.1f} @ {price:.3f})")
+            elif "invalid amounts" in err_str:
+                logger.warning(f"⛔ Order rejected: decimal precision ({side} {size:.1f} @ {price:.3f})")
+            else:
+                logger.error(f"place_limit_order error: {e}", exc_info=True)
             return None
-    
+
     async def place_market_order(self, token_id: str, side: str, 
                                   size: float) -> Optional[Dict]:
         """
@@ -697,7 +735,9 @@ class CLOBClientV4:
             return 0.0
         
         try:
-            bal = await asyncio.to_thread(self._client.get_balance_allowance)
+            from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
+            params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
+            bal = await asyncio.to_thread(self._client.get_balance_allowance, params)
             if isinstance(bal, dict):
                 return float(bal.get("balance", 0)) / 1e6  # USDC has 6 decimals
             return 0.0

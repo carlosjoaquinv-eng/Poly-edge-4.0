@@ -141,10 +141,11 @@ class OrderbookWSFeed:
 
         self._subscribed.update(new_ids)
 
-        if self._connected and self._ws and not self._ws.closed:
-            asyncio.create_task(self._send_subscribe(list(new_ids)))
-        else:
-            self._pending_subscribe.update(new_ids)
+        # Buffer new subscriptions — they'll be sent on next connect or via pending flush
+        self._pending_subscribe.update(new_ids)
+        # Schedule a batched flush (debounce: waits 1s for more subscribes to accumulate)
+        if not hasattr(self, '_flush_task') or self._flush_task is None or self._flush_task.done():
+            self._flush_task = asyncio.create_task(self._flush_pending_subscribes())
 
         logger.info(f"WS subscribing to {len(new_ids)} tokens (total: {len(self._subscribed)})")
 
@@ -238,7 +239,7 @@ class OrderbookWSFeed:
                     consecutive_failures = 0
                     logger.info("Orderbook WS connected")
 
-                    # Subscribe to all tracked tokens
+                    # Subscribe to all tracked tokens in one message
                     all_tokens = list(self._subscribed | self._pending_subscribe)
                     self._pending_subscribe.clear()
                     if all_tokens:
@@ -251,14 +252,18 @@ class OrderbookWSFeed:
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             self._handle_message(msg.data)
-                        elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                        elif msg.type == aiohttp.WSMsgType.ERROR:
+                            logger.warning(f"Orderbook WS error: {ws.exception()}")
+                            break
+                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING):
+                            logger.warning(f"Orderbook WS close frame: code={ws.close_code} reason={ws.exception()}")
                             break
 
                     # WS disconnected normally
                     self._connected = False
                     if self._ping_task:
                         self._ping_task.cancel()
-                    logger.warning("Orderbook WS disconnected")
+                    logger.warning(f"Orderbook WS disconnected (close_code={ws.close_code}, msgs={self._msg_count})")
 
             except asyncio.CancelledError:
                 return
@@ -328,6 +333,19 @@ class OrderbookWSFeed:
         except Exception as e:
             logger.warning(f"WS subscribe send error: {e}")
             self._pending_subscribe.update(token_ids)
+
+    async def _flush_pending_subscribes(self):
+        """Wait briefly to accumulate subscribes, then send in one batch."""
+        await asyncio.sleep(1.0)  # Debounce: collect subscribes for 1s
+        pending = list(self._pending_subscribe)
+        if not pending:
+            return
+        self._pending_subscribe.clear()
+        if self._connected and self._ws and not self._ws.closed:
+            await self._send_subscribe(pending)
+        else:
+            # Will be sent on next reconnect via initial subscribe
+            self._pending_subscribe.update(pending)
 
     async def _send_unsubscribe(self, token_ids: List[str]):
         """Send dynamic unsubscribe message."""

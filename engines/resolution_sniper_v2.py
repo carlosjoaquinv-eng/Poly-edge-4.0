@@ -322,19 +322,42 @@ class MarketMapper:
     def find_markets_for_event(self, event: FeedEvent) -> List[MarketMapping]:
         """
         Find all Polymarket markets relevant to a feed event.
-        
+
         Returns markets sorted by relevance (most relevant first).
+        Domain-gated: football events only match sports markets, etc.
         """
         candidates: Dict[str, float] = {}  # condition_id → relevance score
-        
+        has_structured_match = False
+
         if event.source == "football":
             self._match_football_event(event, candidates)
+            has_structured_match = len(candidates) > 0
         elif event.source == "crypto":
             self._match_crypto_event(event, candidates)
-        
-        # Keyword fallback for all event types
-        self._match_keywords(event, candidates)
-        
+            has_structured_match = len(candidates) > 0
+
+        # Keyword fallback ONLY if no structured matches found
+        if not has_structured_match:
+            self._match_keywords(event, candidates)
+
+        # Filter by minimum relevance (reject weak keyword-only matches)
+        MIN_RELEVANCE = 3.0
+        candidates = {cid: score for cid, score in candidates.items() if score >= MIN_RELEVANCE}
+
+        # Domain filter: football events → only sports/football markets
+        if event.source == "football":
+            sports_keywords = {"win", "championship", "cup", "finals", "nhl", "nba", "nfl",
+                               "mlb", "premier", "league", "match", "tournament", "series",
+                               "playoff", "stanley", "super bowl", "world cup"}
+            filtered = {}
+            for cid, score in candidates.items():
+                m = self._markets.get(cid)
+                if m and (m.category in ("football", "sports", "")
+                          or m.team_home or m.team_away
+                          or any(kw in m.question.lower() for kw in sports_keywords)):
+                    filtered[cid] = score
+            candidates = filtered
+
         # Sort by relevance, return mappings
         sorted_cids = sorted(candidates.keys(), key=lambda c: candidates[c], reverse=True)
         results = []
@@ -342,7 +365,7 @@ class MarketMapper:
             mapping = self._markets.get(cid)
             if mapping:
                 results.append(mapping)
-        
+
         return results
     
     def _match_football_event(self, event: FeedEvent, candidates: Dict[str, float]):
@@ -387,17 +410,12 @@ class MarketMapper:
                         candidates[cid] = candidates.get(cid, 0) + 5.0
     
     def _match_keywords(self, event: FeedEvent, candidates: Dict[str, float]):
-        """Keyword-based fuzzy matching for any event type."""
+        """Keyword-based exact matching for non-structured event types."""
         for kw in event.keywords:
             kw_lower = kw.lower()
+            # Exact keyword match only (no substring — too many false positives)
             for cid in self._keyword_index.get(kw_lower, []):
                 candidates[cid] = candidates.get(cid, 0) + 2.0
-            
-            # Substring match against all keywords
-            for indexed_kw, cids in self._keyword_index.items():
-                if kw_lower in indexed_kw or indexed_kw in kw_lower:
-                    for cid in cids:
-                        candidates[cid] = candidates.get(cid, 0) + 1.0
     
     def _detect_football_market(self, mapping: MarketMapping, question: str):
         """Extract team names and league from market question."""
@@ -575,14 +593,30 @@ class GapDetector:
         
         return signals
     
-    def _compute_gap(self, event: FeedEvent, 
+    def _compute_gap(self, event: FeedEvent,
                       market: MarketMapping) -> Optional[GapSignal]:
         """Compute fair value gap for a specific event-market pair."""
-        
+
         current_price = market.current_price
         if current_price <= 0.01 or current_price >= 0.99:
             return None  # Already resolved
-        
+
+        # Causal validation: football events only affect markets where
+        # one of the playing teams is actually referenced in the market
+        if event.source == "football":
+            home = event.data.get("home_team", "").lower()
+            away = event.data.get("away_team", "").lower()
+            q = market.question.lower()
+            mh = (market.team_home or "").lower()
+            ma = (market.team_away or "").lower()
+            team_in_market = False
+            for team in [home, away]:
+                if team and (team in q or team == mh or team == ma):
+                    team_in_market = True
+                    break
+            if not team_in_market:
+                return None  # No causal link between event teams and market
+
         # Estimate fair value shift based on event type
         fair_value, confidence, urgency, reasoning = self._estimate_fair_value(
             event, market, current_price
