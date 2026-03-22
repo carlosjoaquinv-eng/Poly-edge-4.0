@@ -1269,6 +1269,38 @@ body::after {
   vertical-align: middle;
 }
 
+/* ── Daily PnL Tracker ── */
+.daily-pnl-panel {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px 24px; margin-top: 16px;
+  transition: border-color 0.2s;
+}
+.daily-pnl-panel:hover { border-color: var(--border-active); }
+.daily-pnl-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.daily-pnl-title { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text-0); letter-spacing: 0.5px; }
+.daily-pnl-summary { display: flex; gap: 16px; font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+.daily-pnl-summary .val-up { color: var(--green); }
+.daily-pnl-summary .val-down { color: var(--red); }
+
+/* Bar Chart */
+.daily-bars-container { position: relative; height: 180px; margin-bottom: 12px; }
+#daily-bars-canvas { width: 100%; height: 180px; display: block; cursor: crosshair; }
+
+/* Daily Table */
+.daily-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+.daily-table th {
+  text-align: left; padding: 6px 10px; color: var(--text-2); font-weight: 500;
+  border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.daily-table td { padding: 6px 10px; border-bottom: 1px solid rgba(var(--border-rgb, 255,255,255), 0.04); }
+.daily-table tr:hover td { background: rgba(0,180,216,0.04); }
+.daily-table .day-positive { color: var(--green); }
+.daily-table .day-negative { color: var(--red); }
+.daily-table .day-zero { color: var(--text-2); }
+.daily-table-scroll { max-height: 240px; overflow-y: auto; }
+.daily-table-scroll::-webkit-scrollbar { width: 4px; }
+.daily-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
 /* Per-Market PnL Breakdown */
 .pnl-markets-panel {
   background: var(--bg-1);
@@ -1550,6 +1582,104 @@ body::after {
   font-weight: 500;
   color: var(--text-0);
   letter-spacing: 1px;
+}
+
+/* ── Strategy Profiles ── */
+.strategy-profiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.profile-card {
+  background: var(--bg-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.4s ease-out both;
+  position: relative;
+}
+.profile-card:nth-child(1) { animation-delay: 0.05s; }
+.profile-card:nth-child(2) { animation-delay: 0.1s; }
+.profile-card:nth-child(3) { animation-delay: 0.15s; }
+.profile-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(232,190,93,0.08);
+}
+.profile-card.active {
+  border-color: var(--amber);
+  box-shadow: 0 0 16px rgba(232,190,93,0.15), 0 0 32px rgba(232,190,93,0.05);
+}
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.profile-card-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.profile-card-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-0);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.profile-card-desc {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.profile-card-params {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.profile-card-params span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+  letter-spacing: 0.3px;
+}
+.profile-card-btn {
+  width: 100%;
+  padding: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-1);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.profile-card-btn:hover {
+  background: rgba(232,190,93,0.08);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.profile-card.active .profile-card-btn {
+  background: rgba(232,190,93,0.12);
+  border-color: var(--amber);
+  color: var(--amber);
+  cursor: default;
+}
+@media (max-width: 768px) {
+  .strategy-profiles { grid-template-columns: 1fr; }
 }
 
 /* ── Responsive ── */
@@ -1891,6 +2021,192 @@ body::after {
   display: none;
 }
 .rg-resume-btn:hover { background: rgba(46,203,113,0.15); }
+
+/* ── Positions Tab ── */
+/* ── Portfolio Cards ── */
+.portfolio-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; padding: 0 2px;
+}
+.portfolio-title {
+  font-family: var(--heading); font-size: 18px; font-weight: 700; color: var(--text-0);
+  letter-spacing: -0.3px;
+}
+.portfolio-equity-badge {
+  font-family: var(--mono); font-size: 13px; padding: 6px 14px;
+  border-radius: 8px; font-weight: 600;
+}
+.portfolio-equity-badge.up { background: rgba(46,203,113,0.12); color: var(--green); }
+.portfolio-equity-badge.down { background: rgba(231,76,90,0.12); color: var(--red); }
+
+.portfolio-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.portfolio-card {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px 18px; transition: all 0.2s ease;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.portfolio-card:hover { border-color: var(--border-active); box-shadow: var(--glow-hover); transform: translateY(-1px); }
+.portfolio-card.card-positive { border-left: 3px solid var(--green); }
+.portfolio-card.card-negative { border-left: 3px solid var(--red); }
+.portfolio-card.card-neutral { border-left: 3px solid var(--text-2); }
+
+.portfolio-card-top {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+}
+.portfolio-card-title {
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--text-0);
+  line-height: 1.3; flex: 1; max-width: 220px;
+}
+.portfolio-card-outcome {
+  font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px;
+  background: rgba(232,190,93,0.1); color: var(--amber); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+}
+
+.portfolio-card-metrics {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+}
+.portfolio-card-metric {
+  text-align: center; padding: 6px 0;
+}
+.portfolio-card-metric:not(:last-child) { border-right: 1px solid var(--border); }
+.portfolio-card-metric-label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px;
+}
+.portfolio-card-metric-val {
+  font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text-0);
+}
+
+.portfolio-card-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 8px; border-top: 1px solid var(--border);
+}
+.portfolio-card-pnl {
+  font-family: var(--mono); font-size: 15px; font-weight: 700;
+}
+.portfolio-card-pnl.up { color: var(--green); }
+.portfolio-card-pnl.down { color: var(--red); }
+.portfolio-card-pct {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: 6px;
+}
+.portfolio-card-pct.up { background: rgba(46,203,113,0.12); color: var(--green); }
+
+/* Sell buttons */
+.sell-btn {
+  background: rgba(231,76,60,0.15); color: var(--red); border: 1px solid var(--red);
+  padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.sell-btn:hover { background: var(--red); color: #fff; }
+.sell-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sell-btn.selling { background: var(--gold); color: var(--bg-card); border-color: var(--gold); }
+
+.bulk-sell-bar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-bottom: 12px; padding: 8px 0;
+}
+.bulk-sell-btn {
+  background: rgba(231,76,60,0.1); color: var(--red); border: 1px solid rgba(231,76,60,0.3);
+  padding: 6px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.bulk-sell-btn:hover { background: var(--red); color: #fff; border-color: var(--red); }
+.bulk-sell-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.bulk-sell-result { font-size: 12px; color: var(--text-2); }
+.portfolio-card-pct.down { background: rgba(231,76,90,0.12); color: var(--red); }
+
+.portfolio-card-size {
+  font-family: var(--mono); font-size: 10px; color: var(--text-2);
+}
+
+/* ── Portfolio Summary Bar ── */
+.portfolio-summary-bar {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px;
+}
+.portfolio-stat {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; text-align: center; transition: border-color 0.2s;
+}
+.portfolio-stat:hover { border-color: var(--border-active); }
+.portfolio-stat-label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;
+}
+.portfolio-stat-value {
+  font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text-0);
+}
+.portfolio-stat-sub {
+  font-family: var(--mono); font-size: 10px; color: var(--text-2); margin-top: 3px;
+}
+
+@media (max-width: 900px) {
+  .portfolio-summary-bar { grid-template-columns: repeat(3, 1fr); }
+  .portfolio-cards { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .portfolio-summary-bar { grid-template-columns: repeat(2, 1fr); }
+}
+
+.positions-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;
+}
+.pos-summary-card {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; transition: border-color 0.2s;
+}
+.pos-summary-card:hover { border-color: var(--border-active); }
+.pos-summary-label { font-family: var(--mono); font-size: 10px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.pos-summary-value { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--text-0); }
+.pos-summary-sub { font-family: var(--mono); font-size: 11px; color: var(--text-2); margin-top: 4px; }
+
+.positions-table-wrap {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; transition: border-color 0.2s;
+}
+.positions-table-wrap:hover { border-color: var(--border-active); }
+.positions-table {
+  width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px;
+}
+.positions-table th {
+  text-align: left; padding: 10px 12px; color: var(--text-2); font-weight: 500;
+  border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.5px; background: var(--bg-2);
+}
+.positions-table td {
+  padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--text-0); vertical-align: middle;
+}
+.positions-table tr:hover td { background: rgba(232,190,93,0.03); }
+.positions-table .pos-title { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-pnl-positive { color: var(--green); font-weight: 600; }
+.pos-pnl-negative { color: var(--red); font-weight: 600; }
+.pos-pnl-badge {
+  display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+}
+.pos-pnl-badge.up { background: rgba(46,203,113,0.1); color: var(--green); }
+.pos-pnl-badge.down { background: rgba(231,76,90,0.1); color: var(--red); }
+
+/* ── Equity Curve ── */
+.equity-curve-panel {
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px 24px; margin-top: 16px; transition: border-color 0.2s;
+}
+.equity-curve-panel:hover { border-color: var(--border-active); }
+.equity-curve-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+}
+.equity-curve-title { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text-0); letter-spacing: 0.5px; }
+.equity-curve-legend { display: flex; gap: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-2); }
+.equity-curve-legend span::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 1px; }
+.equity-curve-legend .leg-equity::before { background: var(--amber); }
+.equity-curve-legend .leg-deposit::before { background: var(--text-2); }
+.equity-canvas-container { position: relative; height: 220px; }
+#equity-curve-canvas { width: 100%; height: 220px; display: block; cursor: crosshair; }
 </style>
 </head>
 <body>
@@ -1968,6 +2284,7 @@ body::after {
   <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
   <button class="tab-btn" data-tab="trades">Trades</button>
   <button class="tab-btn" data-tab="pnl">PnL</button>
+  <button class="tab-btn" data-tab="positions">Positions</button>
   <button class="tab-btn" data-tab="config">Config</button>
 </div>
 
@@ -1984,7 +2301,7 @@ body::after {
     <div class="panel-body">
       <div class="metrics" id="system-metrics">
         <div class="metric">
-          <div class="metric-label">Bankroll</div>
+          <div class="metric-label">Equity</div>
           <div class="metric-value" id="sys-bankroll">$—</div>
         </div>
         <div class="metric">
@@ -2504,6 +2821,105 @@ body::after {
       </div>
     </div>
 
+    <!-- Daily PnL Tracker -->
+    <div class="daily-pnl-panel">
+      <div class="daily-pnl-header">
+        <span class="daily-pnl-title">Daily P&amp;L Tracker</span>
+        <div class="daily-pnl-summary">
+          <span>Avg: <span id="daily-avg">$0</span></span>
+          <span>Best: <span id="daily-best">$0</span></span>
+          <span>Worst: <span id="daily-worst">$0</span></span>
+          <span>Win Days: <span id="daily-winrate">0%</span></span>
+        </div>
+      </div>
+      <div class="daily-bars-container">
+        <canvas id="daily-bars-canvas"></canvas>
+      </div>
+      <div class="daily-table-scroll">
+        <table class="daily-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Day P&amp;L</th>
+              <th>Cumulative</th>
+              <th>MM Real.</th>
+              <th>MM Unreal.</th>
+              <th>Sniper</th>
+              <th>Exposure</th>
+              <th>Equity</th>
+            </tr>
+          </thead>
+          <tbody id="daily-table-body">
+            <tr><td colspan="8" class="empty-state" style="font-size:11px;text-align:center">Loading daily data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Equity Curve -->
+    <div class="equity-curve-panel">
+      <div class="equity-curve-header">
+        <span class="equity-curve-title">Equity Curve</span>
+        <div class="equity-curve-legend">
+          <span class="leg-equity">Equity</span>
+          <span class="leg-deposit">$507 Deposit</span>
+        </div>
+      </div>
+      <div class="equity-canvas-container">
+        <canvas id="equity-curve-canvas"></canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Tab: Positions -->
+<div class="tab-content" id="tab-positions">
+  <!-- Header -->
+  <div class="portfolio-header">
+    <div class="portfolio-title">Portfolio</div>
+    <span class="portfolio-equity-badge up" id="port-equity-badge">Equity: $0</span>
+  </div>
+
+  <!-- Summary Stats Bar -->
+  <div class="portfolio-summary-bar">
+    <div class="portfolio-stat">
+      <div class="portfolio-stat-label">Deposit</div>
+      <div class="portfolio-stat-value" id="port-deposit">$507</div>
+    </div>
+    <div class="portfolio-stat">
+      <div class="portfolio-stat-label">Equity</div>
+      <div class="portfolio-stat-value" id="port-equity">$0</div>
+      <div class="portfolio-stat-sub" id="port-roi">ROI: 0%</div>
+    </div>
+    <div class="portfolio-stat">
+      <div class="portfolio-stat-label">Total P&amp;L</div>
+      <div class="portfolio-stat-value" id="port-pnl">$0</div>
+      <div class="portfolio-stat-sub" id="port-pnl-pct">0%</div>
+    </div>
+    <div class="portfolio-stat">
+      <div class="portfolio-stat-label">Free USDC</div>
+      <div class="portfolio-stat-value" id="port-free-usdc">$0</div>
+    </div>
+    <div class="portfolio-stat">
+      <div class="portfolio-stat-label">Positions</div>
+      <div class="portfolio-stat-value" id="port-count">0</div>
+    </div>
+  </div>
+
+  <!-- Bulk Actions Bar -->
+  <div class="bulk-sell-bar">
+    <span class="bulk-sell-result" id="bulk-sell-result"></span>
+    <button class="bulk-sell-btn" id="btn-bulk-sell" onclick="bulkSellLosers()">🗑️ Sell All Losers</button>
+  </div>
+
+  <!-- Position Cards Grid -->
+  <div class="portfolio-cards" id="portfolio-cards">
+    <div class="portfolio-card card-neutral">
+      <div class="portfolio-card-top">
+        <div class="portfolio-card-title">Loading positions...</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2825,10 +3241,11 @@ function updateSystem(data) {
   const mmPnl = (mm.pnl?.realized || 0) + (mm.pnl?.unrealized || 0);
   const snPnl = sn.executor?.total_pnl || 0;
   const totalPnl = mmPnl + snPnl;
-  const bankroll = state.bankroll || 5000;
+  const bankroll = state.bankroll || 507;
   const roi = bankroll > 0 ? (totalPnl / bankroll * 100) : 0;
 
-  document.getElementById('sys-bankroll').textContent = '$' + bankroll.toLocaleString();
+  const equity = state.equity || bankroll;
+  document.getElementById('sys-bankroll').textContent = '$' + equity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
   const roiEl = document.getElementById('sys-roi');
   roiEl.textContent = fmtPct(roi);
   roiEl.className = 'metric-value ' + pnlClass(roi);
@@ -2923,7 +3340,21 @@ function updateMM(mm) {
       if (m.question && m.token_id) tokenNames[m.token_id] = m.question;
     });
   }
-  updateInventory(mm.inventory?.positions || {}, tokenNames);
+  // Fetch complete token name mapping (positions + active markets)
+  var positions_ = positions;
+  fetchJSON('/api/token-names').then(function(nameData) {
+    if (nameData && nameData.names) {
+      // Direct mapping from comprehensive endpoint
+      Object.entries(nameData.names).forEach(function(entry) {
+        var tid = entry[0];
+        var title = entry[1];
+        tokenNames[tid] = title;  // Always overwrite — this is the authoritative source
+      });
+    }
+    updateInventory(positions_, tokenNames);
+  }).catch(function() {
+    updateInventory(positions_, tokenNames);
+  });
   updateRiskGuard(mm);
 }
 
@@ -2960,7 +3391,15 @@ function updateInventory(positions, tokenNames) {
   }
 
   const maxPos = 50;
-  panel.innerHTML = Object.entries(positions).map(([market, pos]) => {
+  const activePositions = Object.entries(positions).filter(([_, pos]) => {
+    const n = pos.net_position || pos.net || 0;
+    return Math.abs(n) >= 0.5;
+  });
+  if (activePositions.length === 0) {
+    panel.innerHTML = '<div class="empty-state">No positions</div>';
+    return;
+  }
+  panel.innerHTML = activePositions.map(([market, pos]) => {
     const net = pos.net_position || pos.net || 0;
     const upnl = pos.upnl || pos.unrealized_pnl || 0;
     const tid = pos.token_id || market;
@@ -3561,7 +4000,7 @@ async function refreshPnl() {
   const mmPnl = mmReal + mmUnreal;
   const snPnl = sn.executor?.total_pnl || 0;
   const totalPnl = mmPnl + snPnl;
-  const bankroll = state.bankroll || 5000;
+  const bankroll = state.bankroll || 507;
   const roi = bankroll > 0 ? (totalPnl / bankroll * 100) : 0;
   const mmExp = mm.inventory?.total_exposure || 0;
   const snExp = sn.executor?.total_exposure || 0;
@@ -3584,8 +4023,9 @@ async function refreshPnl() {
     deltaBadge.className = 'pnl-hero-badge ' + (isUp ? 'up' : delta < -0.01 ? 'down' : 'neutral');
   }
 
-  // Bankroll label
-  document.getElementById('pnl-hero-bankroll').textContent = 'Bankroll: $' + bankroll.toLocaleString();
+  // Bankroll / Equity label
+  const eqVal = state.equity || bankroll;
+  document.getElementById('pnl-hero-bankroll').textContent = 'Equity: $' + eqVal.toLocaleString(undefined, {maximumFractionDigits: 0}) + ' / Deposit: $' + bankroll;
 
   // ROI hero
   const heroRoi = document.getElementById('pnl-hero-roi');
@@ -3699,6 +4139,224 @@ async function refreshPnl() {
     drawPnlChart(histData);
     setupPnlHover();
   }
+
+  // ─── Daily PnL Tracker ───
+  refreshDailyPnl();
+
+  // ─── Equity Curve ───
+  if (histData && histData.length >= 2) {
+    drawEquityCurve(histData);
+  }
+}
+
+async function refreshDailyPnl() {
+  try {
+    const data = await fetchJSON('/api/daily_pnl?days=30');
+    if (!data || !data.days || data.days.length === 0) return;
+
+    const days = data.days;
+    const summary = data.summary || {};
+
+    // Update summary stats
+    const avgEl = document.getElementById('daily-avg');
+    const bestEl = document.getElementById('daily-best');
+    const worstEl = document.getElementById('daily-worst');
+    const wrEl = document.getElementById('daily-winrate');
+
+    if (avgEl) {
+      const avg = summary.avg_daily_pnl || 0;
+      avgEl.textContent = (avg >= 0 ? '+' : '') + '$' + avg.toFixed(2);
+      avgEl.className = avg >= 0 ? 'val-up' : 'val-down';
+    }
+    if (bestEl && summary.best_day) {
+      bestEl.textContent = '+$' + summary.best_day.pnl.toFixed(2);
+      bestEl.className = 'val-up';
+    }
+    if (worstEl && summary.worst_day) {
+      const wp = summary.worst_day.pnl;
+      worstEl.textContent = (wp >= 0 ? '+' : '') + '$' + wp.toFixed(2);
+      worstEl.className = wp >= 0 ? 'val-up' : 'val-down';
+    }
+    if (wrEl) {
+      wrEl.textContent = (summary.win_rate || 0) + '%';
+      wrEl.className = (summary.win_rate || 0) >= 50 ? 'val-up' : 'val-down';
+    }
+
+    // Draw bar chart
+    drawDailyBars(days);
+
+    // Update table
+    const tbody = document.getElementById('daily-table-body');
+    if (tbody) {
+      const reversed = [...days].reverse();
+      tbody.innerHTML = reversed.map(function(d) {
+        const dpnl = d.day_pnl;
+        const cls = dpnl > 0.01 ? 'day-positive' : dpnl < -0.01 ? 'day-negative' : 'day-zero';
+        const cumCls = d.cumulative_pnl > 0.01 ? 'day-positive' : d.cumulative_pnl < -0.01 ? 'day-negative' : 'day-zero';
+        const eqStr = d.equity ? '$' + d.equity.toLocaleString(undefined, {maximumFractionDigits: 0}) : '—';
+        const dateObj = new Date(d.date + 'T12:00:00');
+        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return '<tr>' +
+          '<td>' + dateStr + '</td>' +
+          '<td class="' + cls + '">' + (dpnl >= 0 ? '+' : '') + '$' + dpnl.toFixed(2) + '</td>' +
+          '<td class="' + cumCls + '">' + (d.cumulative_pnl >= 0 ? '+' : '') + '$' + d.cumulative_pnl.toFixed(2) + '</td>' +
+          '<td>$' + d.mm_realized.toFixed(2) + '</td>' +
+          '<td>$' + d.mm_unrealized.toFixed(2) + '</td>' +
+          '<td>$' + d.sniper_pnl.toFixed(2) + '</td>' +
+          '<td>$' + d.exposure.toFixed(0) + '</td>' +
+          '<td>' + eqStr + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+  } catch (e) {
+    console.warn('Daily PnL fetch error:', e);
+  }
+}
+
+function drawDailyBars(days) {
+  var canvas = document.getElementById('daily-bars-canvas');
+  if (!canvas) return;
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var W = rect.width, H = rect.height;
+  var pad = { top: 20, right: 50, bottom: 28, left: 10 };
+  var chartW = W - pad.left - pad.right;
+  var chartH = H - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (days.length === 0) return;
+
+  var vals = days.map(function(d) { return d.day_pnl; });
+  var cumVals = days.map(function(d) { return d.cumulative_pnl; });
+  var allVals = vals.concat(cumVals).concat([0]);
+  var minV = Math.min.apply(null, allVals);
+  var maxV = Math.max.apply(null, allVals);
+  if (maxV === minV) { maxV += 1; minV -= 1; }
+  var range = maxV - minV;
+
+  function yPos(v) { return pad.top + (1 - (v - minV) / range) * chartH; }
+  var zeroY = yPos(0);
+
+  // Bar width
+  var barW = Math.max(4, Math.min(28, (chartW / days.length) * 0.7));
+  var gap = (chartW - barW * days.length) / Math.max(days.length - 1, 1);
+  if (days.length === 1) gap = 0;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(155,149,144,0.08)';
+  ctx.lineWidth = 1;
+  var gridSteps = 4;
+  for (var g = 0; g <= gridSteps; g++) {
+    var gv = minV + (range * g / gridSteps);
+    var gy = yPos(gv);
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(W - pad.right, gy); ctx.stroke();
+    ctx.fillStyle = 'rgba(155,149,144,0.4)';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('$' + gv.toFixed(1), W - pad.right + 40, gy + 3);
+  }
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(155,149,144,0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.left, zeroY); ctx.lineTo(W - pad.right, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bars
+  for (var i = 0; i < days.length; i++) {
+    var x = pad.left + i * (barW + gap);
+    var v = vals[i];
+    var barY = yPos(v);
+    var barH2 = Math.abs(barY - zeroY);
+    var topY = v >= 0 ? barY : zeroY;
+
+    var gradient = ctx.createLinearGradient(x, topY, x, topY + barH2);
+    if (v >= 0) {
+      gradient.addColorStop(0, 'rgba(46,203,113,0.9)');
+      gradient.addColorStop(1, 'rgba(46,203,113,0.3)');
+    } else {
+      gradient.addColorStop(0, 'rgba(231,76,90,0.3)');
+      gradient.addColorStop(1, 'rgba(231,76,90,0.9)');
+    }
+    ctx.fillStyle = gradient;
+
+    // Rounded bars
+    var r = Math.min(3, barW / 2);
+    ctx.beginPath();
+    if (v >= 0) {
+      ctx.moveTo(x + r, topY);
+      ctx.lineTo(x + barW - r, topY);
+      ctx.quadraticCurveTo(x + barW, topY, x + barW, topY + r);
+      ctx.lineTo(x + barW, topY + barH2);
+      ctx.lineTo(x, topY + barH2);
+      ctx.lineTo(x, topY + r);
+      ctx.quadraticCurveTo(x, topY, x + r, topY);
+    } else {
+      ctx.moveTo(x, topY);
+      ctx.lineTo(x + barW, topY);
+      ctx.lineTo(x + barW, topY + barH2 - r);
+      ctx.quadraticCurveTo(x + barW, topY + barH2, x + barW - r, topY + barH2);
+      ctx.lineTo(x + r, topY + barH2);
+      ctx.quadraticCurveTo(x, topY + barH2, x, topY + barH2 - r);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Date label (show every few bars)
+    if (days.length <= 7 || i % Math.ceil(days.length / 7) === 0 || i === days.length - 1) {
+      var dateObj = new Date(days[i].date + 'T12:00:00');
+      var label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      ctx.fillStyle = 'rgba(155,149,144,0.5)';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x + barW / 2, H - 6);
+    }
+  }
+
+  // Cumulative PnL line
+  ctx.strokeStyle = '#00b4d8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (var j = 0; j < days.length; j++) {
+    var lx = pad.left + j * (barW + gap) + barW / 2;
+    var ly = yPos(cumVals[j]);
+    if (j === 0) ctx.moveTo(lx, ly); else ctx.lineTo(lx, ly);
+  }
+  ctx.stroke();
+
+  // Dots on cumulative line
+  ctx.fillStyle = '#00b4d8';
+  for (var k = 0; k < days.length; k++) {
+    var dx = pad.left + k * (barW + gap) + barW / 2;
+    var dy = yPos(cumVals[k]);
+    ctx.beginPath();
+    ctx.arc(dx, dy, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Legend
+  ctx.font = '10px monospace';
+  ctx.fillStyle = 'rgba(46,203,113,0.8)';
+  ctx.fillRect(W - pad.right - 120, 4, 10, 10);
+  ctx.fillStyle = 'rgba(155,149,144,0.6)';
+  ctx.textAlign = 'left';
+  ctx.fillText('Day PnL', W - pad.right - 106, 13);
+
+  ctx.strokeStyle = '#00b4d8';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W - pad.right - 50, 9); ctx.lineTo(W - pad.right - 35, 9); ctx.stroke();
+  ctx.fillStyle = 'rgba(155,149,144,0.6)';
+  ctx.fillText('Cum.', W - pad.right - 32, 13);
 }
 
 let _pnlHoverSetup = false;
@@ -3942,10 +4600,60 @@ async function refreshConfig() {
 
   const container = document.getElementById('config-content');
 
+  // Fetch strategy profile
+  let profileHTML = '';
+  try {
+    const profileData = await fetchJSON('/api/strategy_profile');
+    if (profileData) {
+      const activeProfile = profileData.active;
+      const PROFILES = {
+        conservative: { name: 'Conservative', icon: '\u{1F6E1}\u{FE0F}', desc: 'Capital preservation \u2014 small trades, 30% reserve',
+          params: ['Kelly MM: 0.15', 'Quote: $5', 'Markets: 2', 'Max Loss: $15/day', 'Reserve: 30%', 'Edge: 8%+'],
+          risk: { risk_pct: 1.5, reserve: 30, exposure: 40 }
+        },
+        balanced: { name: 'Balanced', icon: '\u2696\u{FE0F}', desc: 'Default \u2014 moderate risk, steady growth, 15% reserve',
+          params: ['Kelly MM: 0.25', 'Quote: $15', 'Markets: 4', 'Max Loss: $40/day', 'Reserve: 15%', 'Edge: 5%+'],
+          risk: { risk_pct: 3.0, reserve: 15, exposure: 65 }
+        },
+        aggressive: { name: 'Aggressive', icon: '\u{1F680}', desc: 'Max growth \u2014 bigger trades, 5% reserve',
+          params: ['Kelly MM: 0.40', 'Quote: $30', 'Markets: 6', 'Max Loss: $80/day', 'Reserve: 5%', 'Edge: 3%+'],
+          risk: { risk_pct: 5.0, reserve: 5, exposure: 85 }
+        },
+      };
+      profileHTML = `
+        <div class="config-section">
+          <div class="config-section-header">Risk Profile</div>
+          <div style="padding: 16px;">
+            <div class="strategy-profiles">
+              ${Object.entries(PROFILES).map(([id, p]) => `
+                <div class="profile-card ${activeProfile === id ? 'active' : ''}" onclick="${activeProfile !== id ? `switchProfile('${id}')` : ''}">
+                  <div class="profile-card-header">
+                    <span class="profile-card-icon">${p.icon}</span>
+                    <span class="profile-card-name">${p.name}</span>
+                  </div>
+                  <div class="profile-card-desc">${p.desc}</div>
+                  <div class="profile-card-params">
+                    ${p.params.map(param => `<span>${param}</span>`).join('')}
+                  </div>
+                  <button class="profile-card-btn" ${activeProfile === id ? 'disabled' : ''} onclick="event.stopPropagation(); switchProfile('${id}')">
+                    ${activeProfile === id ? 'ACTIVE' : 'SELECT'}
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+            ${activeProfile === 'custom' ? '<div style="text-align:center;font-size:11px;color:var(--text-2);margin-top:4px;">Current .env values don\'t match any preset profile</div>' : ''}
+          </div>
+        </div>
+      `;
+    }
+  } catch (e) {
+    console.warn('Strategy profile fetch failed:', e);
+  }
+
   const s = data.structured;
   if (s) {
     const isPaper = s.mode === 'PAPER';
-    container.innerHTML = `
+    container.innerHTML = profileHTML + `
       <div class="config-section">
         <div class="config-section-header">System</div>
         <div class="config-row">
@@ -4008,7 +4716,7 @@ async function refreshConfig() {
       </div>
     `;
   } else {
-    container.innerHTML = `
+    container.innerHTML = profileHTML + `
       <div class="config-section">
         <div class="config-section-header">Configuration</div>
         <pre style="padding:14px;font-size:12px;color:var(--text-1);white-space:pre-wrap;line-height:1.8">${data.text || data.config || 'No config available'}</pre>
@@ -4084,10 +4792,290 @@ async function confirmModeSwitch(targetMode, btn) {
   }
 }
 
+function switchProfile(profileId) {
+  const profileNames = { conservative: 'Conservative', balanced: 'Balanced', aggressive: 'Aggressive' };
+  const profileName = profileNames[profileId] || profileId;
+  const icons = { conservative: '\u{1F6E1}\u{FE0F}', balanced: '\u2696\u{FE0F}', aggressive: '\u{1F680}' };
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mode-confirm-overlay';
+  overlay.innerHTML = `
+    <div class="mode-confirm-box">
+      <h3>${icons[profileId] || ''} Switch to ${profileName}?</h3>
+      <p>This will update risk parameters to <b>${profileName}</b> profile.<br><br>A PM2 restart is required after switching.</p>
+      <div class="mode-confirm-btns">
+        <button class="btn-cancel" onclick="this.closest('.mode-confirm-overlay').remove()">Cancel</button>
+        <button class="btn-confirm-paper" onclick="confirmProfileSwitch('${profileId}', this)">Apply ${profileName}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+async function confirmProfileSwitch(profileId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Applying...';
+
+  try {
+    const resp = await fetch(API_BASE + '/api/strategy_profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ profile: profileId }),
+    });
+    const data = await resp.json();
+
+    const overlay = btn.closest('.mode-confirm-overlay');
+    if (overlay) overlay.remove();
+
+    if (data.error) {
+      showToast(data.error, 'error');
+      return;
+    }
+
+    showToast(data.message || 'Profile updated', 'success');
+    configLoaded = false;
+    refreshConfig();
+
+  } catch (e) {
+    showToast('Failed to switch profile: ' + e.message, 'error');
+    const overlay = btn.closest('.mode-confirm-overlay');
+    if (overlay) overlay.remove();
+  }
+}
+
 function getAuthHeaders() {
   // Dashboard uses HTTP Basic Auth — credentials are passed by the browser
   // This function returns empty headers; browser handles Basic auth via prompt
   return {};
+}
+
+// ─── Positions Tab ───
+async function refreshPositions() {
+  try {
+    const data = await fetchJSON('/api/positions');
+    if (!data) return;
+
+    const positions = data.positions || [];
+    const s = data.summary || {};
+    const pnl = s.total_pnl || 0;
+    const roi = s.roi || 0;
+    const isUp = pnl >= 0;
+
+    // Summary bar
+    var eqBadge = document.getElementById('port-equity-badge');
+    if (eqBadge) {
+      eqBadge.textContent = 'Equity: $' + (s.equity || 0).toFixed(2);
+      eqBadge.className = 'portfolio-equity-badge ' + (isUp ? 'up' : 'down');
+    }
+
+    var depEl = document.getElementById('port-deposit');
+    if (depEl) depEl.textContent = '$' + (s.deposit || 507);
+
+    var eqEl = document.getElementById('port-equity');
+    if (eqEl) { eqEl.textContent = '$' + (s.equity || 0).toFixed(2); eqEl.style.color = isUp ? 'var(--green)' : 'var(--red)'; }
+
+    var roiEl = document.getElementById('port-roi');
+    if (roiEl) { roiEl.textContent = 'ROI: ' + (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%'; roiEl.style.color = isUp ? 'var(--green)' : 'var(--red)'; }
+
+    var pnlEl = document.getElementById('port-pnl');
+    if (pnlEl) { pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2); pnlEl.style.color = isUp ? 'var(--green)' : 'var(--red)'; }
+
+    var pnlPctEl = document.getElementById('port-pnl-pct');
+    if (pnlPctEl) { var pp = s.total_pnl_pct || 0; pnlPctEl.textContent = (pp >= 0 ? '+' : '') + pp.toFixed(1) + '%'; pnlPctEl.style.color = isUp ? 'var(--green)' : 'var(--red)'; }
+
+    var usdcEl = document.getElementById('port-free-usdc');
+    if (usdcEl) usdcEl.textContent = '$' + (s.free_usdc || 0).toFixed(2);
+
+    var countEl = document.getElementById('port-count');
+    if (countEl) countEl.textContent = (s.count || 0);
+
+    // Build position cards
+    var container = document.getElementById('portfolio-cards');
+    if (!container) return;
+
+    if (positions.length === 0) {
+      container.innerHTML = '<div class="portfolio-card card-neutral"><div class="portfolio-card-top"><div class="portfolio-card-title">No open positions</div></div></div>';
+      return;
+    }
+
+    container.innerHTML = positions.map(function(p) {
+      var up = p.pnl >= 0;
+      var cardCls = Math.abs(p.pnl) < 0.10 ? 'card-neutral' : (up ? 'card-positive' : 'card-negative');
+      var pnlSign = up ? '+' : '-';
+      var absPnl = Math.abs(p.pnl);
+      var absPct = Math.abs(p.pnl_pct);
+      var pnlDir = up ? 'up' : 'down';
+
+      // Shorten title
+      var title = p.title || '—';
+      if (title.length > 50) title = title.substring(0, 47) + '...';
+
+      return '<div class="portfolio-card ' + cardCls + '">' +
+        '<div class="portfolio-card-top">' +
+          '<div class="portfolio-card-title">' + title + '</div>' +
+          '<span class="portfolio-card-outcome">' + (p.outcome || '—') + '</span>' +
+        '</div>' +
+        '<div class="portfolio-card-metrics">' +
+          '<div class="portfolio-card-metric">' +
+            '<div class="portfolio-card-metric-label">Cost</div>' +
+            '<div class="portfolio-card-metric-val">$' + p.cost.toFixed(2) + '</div>' +
+          '</div>' +
+          '<div class="portfolio-card-metric">' +
+            '<div class="portfolio-card-metric-label">Value</div>' +
+            '<div class="portfolio-card-metric-val">$' + p.value.toFixed(2) + '</div>' +
+          '</div>' +
+          '<div class="portfolio-card-metric">' +
+            '<div class="portfolio-card-metric-label">Size</div>' +
+            '<div class="portfolio-card-metric-val">' + p.size.toLocaleString(undefined, {maximumFractionDigits: 0}) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="portfolio-card-bottom">' +
+          '<div>' +
+            '<span class="portfolio-card-pnl ' + pnlDir + '">' + pnlSign + '$' + absPnl.toFixed(2) + '</span>' +
+            '<span class="portfolio-card-size"> | avg ' + p.avg_price.toFixed(3) + ' &rarr; ' + p.cur_price.toFixed(3) + '</span>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<span class="portfolio-card-pct ' + pnlDir + '">' + pnlSign + absPct.toFixed(1) + '%</span>' +
+            '<button class="sell-btn" onclick="sellPosition(\'' + p.token_id + '\',' + p.size + ',\'' + title.replace(/'/g, '') + '\', this)">SELL</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+  } catch (e) {
+    console.warn('Positions fetch error:', e);
+  }
+}
+
+// ─── Equity Curve ───
+function drawEquityCurve(histData) {
+  var canvas = document.getElementById('equity-curve-canvas');
+  if (!canvas) return;
+
+  // Filter entries that have equity data
+  var entries = (histData || []).filter(function(e) { return e.equity && e.equity > 0; });
+  if (entries.length < 2) return;
+
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var W = rect.width, H = rect.height;
+  var pad = { top: 20, right: 55, bottom: 30, left: 10 };
+  var chartW = W - pad.left - pad.right;
+  var chartH = H - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  var deposit = 507;
+  var equities = entries.map(function(e) { return e.equity; });
+  var allVals = equities.concat([deposit]);
+  var minV = Math.min.apply(null, allVals) * 0.995;
+  var maxV = Math.max.apply(null, allVals) * 1.005;
+  if (maxV === minV) { maxV += 10; minV -= 10; }
+  var range = maxV - minV;
+
+  function yPos(v) { return pad.top + chartH - ((v - minV) / range) * chartH; }
+  function xPos(i) { return pad.left + (i / (entries.length - 1)) * chartW; }
+
+  // Grid lines
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  var gridSteps = 5;
+  for (var g = 0; g <= gridSteps; g++) {
+    var gv = minV + (range * g / gridSteps);
+    var gy = yPos(gv);
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(W - pad.right, gy); ctx.stroke();
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim() || '#5e5953';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('$' + gv.toFixed(0), W - pad.right + 4, gy + 3);
+  }
+
+  // Deposit reference line (dashed)
+  var depositY = yPos(deposit);
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim() || '#5e5953';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.left, depositY); ctx.lineTo(W - pad.right, depositY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw equity line with gradient color
+  // Determine color based on last equity vs deposit
+  var lastEquity = equities[equities.length - 1];
+  var lineColor = lastEquity >= deposit ?
+    (getComputedStyle(document.documentElement).getPropertyValue('--green').trim() || '#2ecb71') :
+    (getComputedStyle(document.documentElement).getPropertyValue('--red').trim() || '#e74c5a');
+
+  // Fill gradient under the line
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), yPos(equities[0]));
+  for (var i = 1; i < entries.length; i++) {
+    ctx.lineTo(xPos(i), yPos(equities[i]));
+  }
+  ctx.lineTo(xPos(entries.length - 1), pad.top + chartH);
+  ctx.lineTo(xPos(0), pad.top + chartH);
+  ctx.closePath();
+  var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+  if (lastEquity >= deposit) {
+    grad.addColorStop(0, 'rgba(46,203,113,0.15)');
+    grad.addColorStop(1, 'rgba(46,203,113,0)');
+  } else {
+    grad.addColorStop(0, 'rgba(231,76,90,0.15)');
+    grad.addColorStop(1, 'rgba(231,76,90,0)');
+  }
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Draw the line itself
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), yPos(equities[0]));
+  for (var j = 1; j < entries.length; j++) {
+    // Smooth curve using quadratic bezier
+    var prevX = xPos(j - 1), prevY = yPos(equities[j - 1]);
+    var curX = xPos(j), curY = yPos(equities[j]);
+    var cpx = (prevX + curX) / 2;
+    ctx.quadraticCurveTo(prevX, prevY, cpx, (prevY + curY) / 2);
+  }
+  ctx.lineTo(xPos(entries.length - 1), yPos(equities[entries.length - 1]));
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // X-axis time labels
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim() || '#5e5953';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  var labelCount = Math.min(6, entries.length);
+  for (var li = 0; li < labelCount; li++) {
+    var idx = Math.floor(li * (entries.length - 1) / (labelCount - 1));
+    var ts = entries[idx]._ts || '';
+    if (ts) {
+      var dt = new Date(ts.replace('Z', '+00:00'));
+      var label = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      ctx.fillText(label, xPos(idx), H - 6);
+    }
+  }
+
+  // Current equity dot
+  var lastX = xPos(entries.length - 1);
+  var lastY = yPos(lastEquity);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = lineColor;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 function showToast(msg, type) {
@@ -4116,6 +5104,9 @@ async function refresh() {
   if (configData?.structured?.bankroll) {
     state.bankroll = configData.structured.bankroll;
   }
+  if (configData?.structured?.equity) {
+    state.equity = configData.structured.equity;
+  }
   updateHeader(statusData);
 
   if (activeTab === 'dashboard') {
@@ -4140,6 +5131,8 @@ async function refresh() {
     refreshTrades();
   } else if (activeTab === 'pnl') {
     refreshPnl();
+  } else if (activeTab === 'positions') {
+    refreshPositions();
   }
 }
 
@@ -4148,6 +5141,77 @@ refresh();
 setInterval(refresh, REFRESH_MS);
 
 console.log('PolyEdge v4 Dashboard initialized — refreshing every 5s');
+
+
+// ─── Manual Sell ───
+async function sellPosition(tokenId, size, title, btn) {
+  if (!confirm('Sell ' + size.toFixed(0) + ' shares of "' + title + '"?')) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  btn.classList.add('selling');
+  try {
+    const resp = await fetch('/api/sell', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ token_id: tokenId, size: size, title: title })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      btn.textContent = '✓ SOLD';
+      btn.style.background = 'var(--green)';
+      btn.style.color = '#fff';
+      btn.style.borderColor = 'var(--green)';
+      setTimeout(refreshPositions, 3000);
+    } else {
+      btn.textContent = 'FAIL';
+      alert('Sell failed: ' + (data.error || 'unknown'));
+      setTimeout(function() { btn.textContent = 'SELL'; btn.disabled = false; btn.classList.remove('selling'); }, 2000);
+    }
+  } catch (e) {
+    btn.textContent = 'ERR';
+    alert('Network error: ' + e.message);
+    setTimeout(function() { btn.textContent = 'SELL'; btn.disabled = false; btn.classList.remove('selling'); }, 2000);
+  }
+}
+
+// ─── Bulk Sell Losers ───
+async function bulkSellLosers() {
+  if (!confirm('Sell ALL losing positions? This cannot be undone.')) return;
+  var btn = document.getElementById('btn-bulk-sell');
+  var result = document.getElementById('bulk-sell-result');
+  btn.disabled = true;
+  btn.textContent = 'Selling...';
+  result.textContent = '';
+  try {
+    const resp = await fetch('/api/bulk-sell-losers', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ min_loss_pct: 0 })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      btn.textContent = '✓ Done';
+      var msg = 'Sold: ' + data.count_sold;
+      if (data.count_failed > 0) msg += ' | Failed: ' + data.count_failed;
+      result.textContent = msg;
+      result.style.color = data.count_sold > 0 ? 'var(--green)' : 'var(--text-2)';
+      setTimeout(refreshPositions, 3000);
+    } else {
+      btn.textContent = 'Failed';
+      result.textContent = data.error || 'Unknown error';
+      result.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    btn.textContent = 'Error';
+    result.textContent = e.message;
+    result.style.color = 'var(--red)';
+  }
+  setTimeout(function() {
+    btn.disabled = false;
+    btn.textContent = '🗑️ Sell All Losers';
+  }, 5000);
+}
+
 </script>
 
 <!-- Wallet modal removed — using server-side bot wallet -->
