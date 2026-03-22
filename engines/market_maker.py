@@ -112,6 +112,11 @@ class InventoryState:
     total_sold: float = 0.0
     n_trades: int = 0
     last_trade_at: float = 0.0
+    # SL/TP tracking
+    peak_price: float = 0.0         # Highest price seen (for trailing stop)
+    tp1_hit: bool = False            # First take-profit level hit
+    tp2_hit: bool = False            # Second take-profit level hit
+    last_exit_time: float = 0.0      # Cooldown after exit
 
 
 # ─────────────────────────────────────────────
@@ -122,21 +127,21 @@ class InventoryState:
 class MMConfig:
     """Market Maker configuration — all tuneable parameters."""
     # Market selection
-    min_liquidity: float = 20_000       # $20K minimum market liquidity
-    min_spread_cents: float = 0.5       # 0.5¢ minimum spread (Polymarket spreads are tight)
-    max_spread_cents: float = 10.0      # Too wide = toxic flow risk
-    min_hours_to_resolution: float = 168  # 7 days minimum
-    max_markets: int = 5                # Max simultaneous markets
-    
+    min_liquidity: float = 1_000        # $5K minimum market liquidity (sports markets have less)
+    min_spread_cents: float = 0.1       # 1.5¢ minimum spread — filter out unprofitable tight markets
+    max_spread_cents: float = 8.0       # >8¢ = dead market, toxic flow risk
+    min_hours_to_resolution: float = 24   # 24 hours minimum (allow closer to resolution)
+    max_markets: int = 8                # Max simultaneous markets
+
     # Quoting
-    target_half_spread: float = 0.015   # 1.5¢ each side of fair value
-    min_quote_size: float = 10.0        # $10 minimum quote size
-    max_quote_size: float = 30.0        # $30 maximum quote size
-    quote_refresh_secs: float = 45.0    # Re-quote every 45s
-    
+    target_half_spread: float = 0.015   # 1.5¢ each side (competitive in 3-5¢ spread markets)
+    min_quote_size: float = 5.0        # $10 minimum quote size
+    max_quote_size: float = 5.0        # $50 maximum quote size
+    quote_refresh_secs: float = 30.0    # Re-quote every 30s
+
     # Inventory limits
-    max_position_per_market: float = 50.0   # $50 max per market
-    max_total_inventory: float = 200.0      # $200 total across all markets
+    max_position_per_market: float = 100.0  # $100 max per market
+    max_total_inventory: float = 500.0      # $500 total across all markets
     inventory_skew_factor: float = 1.0      # Base skew aggressiveness (2x original)
     inventory_skew_nonlinear: bool = True   # Quadratic skew: gentle at low inv, aggressive at high
     
@@ -149,7 +154,7 @@ class MMConfig:
     
     # Risk
     kelly_fraction: float = 0.25        # Quarter Kelly for conservative sizing
-    max_loss_per_day: float = 50.0      # Kill switch: stop if daily loss > $50
+    max_loss_per_day: float = 80.0      # Kill switch: stop if daily loss > $80
     fee_rate: float = 0.01              # Polymarket 1% fee per side
     
     # Stealth / randomness
@@ -157,9 +162,20 @@ class MMConfig:
     time_jitter_secs: float = 3.0       # ±3s random timing variation
     price_jitter_cents: float = 0.002   # ±0.2¢ random price variation
 
+    # ── Position Exit Rules (Capital Preservation) ──
+    sl_enabled: bool = True             # Enable stop-loss
+    sl_pct: float = 0.30               # 30% loss from entry → sell entire position
+    sl_min_position_value: float = 5.0  # Only SL positions worth > $5
+    tp_enabled: bool = True             # Enable take-profit
+    tp_pct: float = 0.50               # 50% gain from entry → sell half
+    tp_full_pct: float = 1.0           # 100% gain (2x) → sell 75%
+    tp_trailing_pct: float = 0.15      # After TP1 hit, trail at -15% from peak
+    exit_check_interval: float = 30.0  # Check every 30s
+    exit_cooldown: float = 300.0       # 5min cooldown after an exit to avoid re-entry
+
     # ── RiskGuard: SAFETY NET (only catches catastrophic failures) ──
     # Native skew handles 95% of inventory management; RiskGuard is the emergency brake
-    max_units_per_market: float = 200.0         # Hard cap on units — strong skew prevents reaching this
+    max_units_per_market: float = 400.0         # Hard cap on units — strong skew prevents reaching this
     inventory_warn_pct: float = 0.70            # 70% → log warning (no action)
     inventory_fadeout_pct: float = 0.85         # 85% → start reducing quote size
     inventory_oneside_pct: float = 0.92         # 92% → only quote reducing side
@@ -452,25 +468,28 @@ class InventoryManager:
         return True
 
     def can_sell(self, token_id: str, size: float, price: float) -> bool:
-        """Check if a sell would violate limits."""
+        """Check if a sell would violate limits.
+
+        On Polymarket, SELL YES requires holding YES tokens.
+        We can only sell up to our net_position (no naked shorts).
+        """
         pos = self.get_position(token_id)
+
+        # ── Polymarket constraint: can't sell tokens we don't own ──
+        if pos.net_position < size:
+            if pos.net_position <= 0:
+                logger.debug(f"⛔ SELL blocked: no inventory to sell (net={pos.net_position:.0f})")
+                return False
+            # Allow partial sell up to what we have (caller should adjust size)
+            logger.debug(f"⛔ SELL blocked: want {size:.0f} but only have {pos.net_position:.0f}")
+            return False
+
         new_position = pos.net_position - size
 
         # ── HARD UNIT CAP (RiskGuard fix #1) ──
         if abs(new_position) > self.config.max_units_per_market:
             logger.debug(f"⛔ SELL blocked: {abs(new_position):.0f} units > {self.config.max_units_per_market:.0f} cap")
             return False
-
-        # Notional at current price
-        new_notional = abs(new_position) * price
-        if new_notional > self.config.max_position_per_market:
-            return False
-
-        # Cost-basis limit
-        if pos.avg_entry > 0:
-            cost_notional = abs(new_position) * pos.avg_entry
-            if cost_notional > self.config.max_position_per_market * 1.5:
-                return False
 
         return True
     
@@ -592,6 +611,9 @@ class InventoryManager:
                     "total_sold": p.total_sold,
                     "n_trades": p.n_trades,
                     "last_trade_at": p.last_trade_at,
+                    "peak_price": p.peak_price,
+                    "tp1_hit": p.tp1_hit,
+                    "tp2_hit": p.tp2_hit,
                 }
                 for tid, p in self._positions.items()
             },
@@ -614,6 +636,9 @@ class InventoryManager:
                 total_sold=pdata.get("total_sold", 0.0),
                 n_trades=pdata.get("n_trades", 0),
                 last_trade_at=pdata.get("last_trade_at", 0.0),
+                peak_price=pdata.get("peak_price", 0.0),
+                tp1_hit=pdata.get("tp1_hit", False),
+                tp2_hit=pdata.get("tp2_hit", False),
             )
             self._positions[tid] = pos
         self._daily_pnl = state.get("daily_pnl", 0.0)
@@ -1005,12 +1030,11 @@ class SpreadAnalyzer:
     def __init__(self, config: MMConfig):
         self.config = config
         self._scores: Dict[str, float] = {}
-    
-    _BLACKLIST_RE = __import__('re').compile(
-        r"jesus|god|devil|satan|gta.*(vi|6)|carti|playboi|kanye|ye\b.*west|alien|ufo|"
-        r"flat.*earth|simulation|time.*travel|zodiac|horoscope|astrology|"
-        r"bigfoot|loch.*ness|illuminati|reptilian|rihanna.*gta|gta.*rihanna",
-        __import__('re').IGNORECASE)
+    _BLACKLIST_RE = __import__("re").compile(
+        r"\bjesus\b|\bsatan\b|\bflat.*earth\b|\bsimulation\b|\btime.*travel\b|"
+        r"\bzodiac\b|\bhoroscope\b|\bastrology\b|\bbigfoot\b|\bloch.*ness\b|"
+        r"\billuminati\b|\breptilian\b",
+        __import__("re").IGNORECASE)
 
     def score_market(self, market: MarketInfo) -> Tuple[bool, float, str]:
         """
@@ -1040,7 +1064,7 @@ class SpreadAnalyzer:
         
         # Price must be in makeable range (not near 0 or 1)
         mid = market.mid_price
-        if mid < 0.10 or mid > 0.90:
+        if mid < 0.02 or mid > 0.98:
             return False, 0, f"Price {mid:.2f} too extreme for MM"
         
         # Score components (0-1 each)
@@ -1049,7 +1073,11 @@ class SpreadAnalyzer:
         gross_spread = market.spread_cents / 100.0
         fees = 2 * self.config.fee_rate * mid  # Both sides
         net_spread = gross_spread - fees
-        spread_score = max(0, min(1, net_spread / 0.03))  # Normalize to 3¢ net = perfect
+        # Cap reward: 3-5¢ net spread is ideal, >10¢ is suspicious (dead market)
+        if net_spread > 0.10:  # >10¢ net spread = dead market, penalize
+            spread_score = max(0, 0.5 - (net_spread - 0.10) * 2)  # Drops to 0 at 35¢
+        else:
+            spread_score = max(0, min(1, net_spread / 0.05))  # 5¢ net = perfect
         
         if net_spread <= 0:
             return False, 0, f"Negative net spread after fees: {net_spread*100:.1f}¢"
@@ -1071,14 +1099,37 @@ class SpreadAnalyzer:
     def select_markets(self, candidates: List[MarketInfo]) -> List[MarketInfo]:
         """Select top N markets for market-making."""
         scored = []
+        from collections import Counter
+        reject_reasons = Counter()
         for m in candidates:
             eligible, score, reason = self.score_market(m)
             if eligible:
                 scored.append((score, m, reason))
                 self._scores[m.condition_id] = score
+            else:
+                # Categorize rejection
+                if "Spread too tight" in reason:
+                    reject_reasons["tight_spread"] += 1
+                elif "Low liquidity" in reason:
+                    reject_reasons["low_liq"] += 1
+                elif "Spread too wide" in reason:
+                    reject_reasons["wide_spread"] += 1
+                elif "too extreme" in reason:
+                    reject_reasons["extreme_price"] += 1
+                elif "Negative net" in reason:
+                    reject_reasons["neg_net"] += 1
+                elif "resolution" in reason:
+                    reject_reasons["close_resolution"] += 1
+                elif "Blacklisted" in reason:
+                    reject_reasons["blacklisted"] += 1
+                else:
+                    reject_reasons[reason[:30]] += 1
         
         scored.sort(key=lambda x: x[0], reverse=True)
         selected = [m for _, m, _ in scored[:self.config.max_markets]]
+        
+        if reject_reasons:
+            logger.info(f"Market rejections: {dict(reject_reasons)}")
         
         if selected:
             logger.info(
@@ -1256,6 +1307,25 @@ class QuoteGenerator:
             last_update=time.time(),
         )
 
+        # ── Inventory-aware enforcement ──
+        # If we have ANY inventory >= 5 shares, ALWAYS place SELL to close
+        if pos.net_position >= 5 and ask_quote is None and rg_action != RiskAction.HALT_MARKET:
+            inv_ratio = pos.net_position / max(self.config.max_units_per_market, 1)
+            aggressive_ask = round(fair_value + half_spread * 0.3, 3)
+            aggressive_ask = max(aggressive_ask, 0.01)
+            ask_size = max(5.0, min(size, pos.net_position))  # Floor at 5 shares
+            ask_quote = Quote(token_id=token_id, side=QuoteSide.ASK,
+                             price=aggressive_ask, size=round(ask_size, 1))
+            logger.info(f"📉 Force ASK: inv={pos.net_position:.0f} ({inv_ratio:.0%}) → ask {aggressive_ask:.3f}x{ask_size:.0f}")
+            pair.ask = ask_quote
+
+        # If inventory > 80% of max, block new buys entirely
+        if pos.net_position > 0:
+            inv_ratio = pos.net_position / max(self.config.max_units_per_market, 1)
+            if inv_ratio > 0.8 and pair.bid:
+                logger.info(f"⛔ BID blocked: inventory {inv_ratio:.0%} > 80% cap")
+                pair.bid = None
+
         return pair
     
     def _kelly_size(self, token_id: str, fair_value: float, 
@@ -1331,6 +1401,8 @@ class MarketMakerEngine:
         self._running = False
         self._paper_mode = True
         self._paper_fills: List[Dict] = []  # Simulated fills for paper mode
+        self._trade_log: List[Dict] = []  # All fills (paper + live), last 200
+        self._last_clob_balance: float = 0.0  # Actual CLOB balance, refreshed periodically
         self._force_kill = False  # Manual kill via /stop command
         self._kill_alerted = False  # One-shot flag for kill-switch Telegram alert
 
@@ -1338,6 +1410,7 @@ class MarketMakerEngine:
         self._started_at = 0.0
         self._quote_count = 0
         self._fill_count = 0
+        self._recently_cancelled = set()  # Order IDs we cancelled (not filled)
         self._total_spread_captured = 0.0
     
     # ── Lifecycle ──
@@ -1358,7 +1431,9 @@ class MarketMakerEngine:
                 f"Max exposure: ${self.config.max_total_inventory}"
             )
         
+        # Run main loops (including RiskGuard + SL/TP)
         # Run main loops (including RiskGuard)
+        # Note: SL/TP exits are handled by ExitManager at portfolio level
         await asyncio.gather(
             self._market_scan_loop(),
             self._quote_loop(),
@@ -1538,16 +1613,34 @@ class MarketMakerEngine:
         if not ob:
             return
         
-        # Polymarket API may not sort — ensure we get true best bid/ask
+        # ── Smart mid: Use Gamma reference + filtered CLOB orderbook ──
+        # Gamma API bestBid/bestAsk reflect real market consensus
+        # CLOB orderbook has dust orders at $0.01/$0.99 that distort mid
+        gamma_mid = market.mid_price  # From Gamma API (reliable)
+        
         bids = ob.get("bids", [])
         asks = ob.get("asks", [])
-        best_bid = 0
-        best_ask = 0
-        if bids:
-            best_bid = max(float(b.get("price", 0)) for b in bids)
-        if asks:
-            best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
-        mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.5
+        
+        # Filter dust: ignore bids < 5% of gamma_mid and asks > 1-(1-gamma_mid)*0.05
+        dust_bid_floor = max(0.02, gamma_mid * 0.3)  # At least 30% of gamma mid
+        dust_ask_ceil = min(0.98, 1.0 - (1.0 - gamma_mid) * 0.3)
+        
+        real_bids = [float(b.get("price", 0)) for b in bids if float(b.get("price", 0)) >= dust_bid_floor]
+        real_asks = [float(a.get("price", 0)) for a in asks if 0 < float(a.get("price", 0)) <= dust_ask_ceil]
+        
+        best_bid = max(real_bids) if real_bids else 0
+        best_ask = min(real_asks) if real_asks else 0
+        
+        # Compute mid: prefer CLOB filtered mid, fallback to Gamma mid
+        if best_bid > 0 and best_ask > 0 and best_ask > best_bid:
+            mid = (best_bid + best_ask) / 2
+        else:
+            mid = gamma_mid  # Trust Gamma when CLOB is empty/extreme
+            # Set best_bid/best_ask from Gamma for downstream use
+            if best_bid <= 0:
+                best_bid = market.best_bid
+            if best_ask <= 0:
+                best_ask = market.best_ask
         
         # Record price for OU calibration
         self.ou.record_price(token_id, mid)
@@ -1565,28 +1658,54 @@ class MarketMakerEngine:
         else:
             # Live mode: cancel old quotes, place new ones
             await self._cancel_quotes(token_id)
-            
+
+            # Check available collateral before placing
+            locked = self._collateral_locked()
+            # Use actual CLOB balance if available, else fall back to config cap
+            balance_cap = self.config.max_total_inventory
+            if hasattr(self, '_last_clob_balance') and self._last_clob_balance > 0:
+                balance_cap = min(self._last_clob_balance, self.config.max_total_inventory)
+            available = balance_cap - locked
+
             if pair.bid:
-                order = await self.clob.place_limit_order(
-                    token_id=token_id,
-                    side="BUY",
-                    price=pair.bid.price,
-                    size=pair.bid.size,
-                )
-                if order:
-                    pair.bid.order_id = order.get("id")
-                    pair.bid.placed_at = time.time()
-            
+                # Enforce Polymarket minimum 5 shares
+                pair.bid.size = max(5.0, pair.bid.size)  # Polymarket min 5 shares
+                order_cost = pair.bid.price * pair.bid.size
+                if order_cost > available:
+                    logger.debug(f"⛔ BID skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
+                    pair.bid = None
+                else:
+                    order = await self.clob.place_limit_order(
+                        token_id=token_id,
+                        side="BUY",
+                        price=pair.bid.price,
+                        size=pair.bid.size,
+                    )
+                    if order:
+                        pair.bid.order_id = order.get("id")
+                        pair.bid.placed_at = time.time()
+                        available -= order_cost
+                    else:
+                        pair.bid = None  # Order rejected (balance/precision)
+
             if pair.ask:
-                order = await self.clob.place_limit_order(
-                    token_id=token_id,
-                    side="SELL",
-                    price=pair.ask.price,
-                    size=pair.ask.size,
-                )
-                if order:
-                    pair.ask.order_id = order.get("id")
-                    pair.ask.placed_at = time.time()
+                pair.ask.size = max(5.0, pair.ask.size)  # Polymarket min 5 shares
+                order_cost = pair.ask.price * pair.ask.size
+                if order_cost > available:
+                    logger.debug(f"⛔ ASK skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
+                    pair.ask = None
+                else:
+                    order = await self.clob.place_limit_order(
+                        token_id=token_id,
+                        side="SELL",
+                        price=pair.ask.price,
+                        size=pair.ask.size,
+                    )
+                    if order:
+                        pair.ask.order_id = order.get("id")
+                        pair.ask.placed_at = time.time()
+                    else:
+                        pair.ask = None  # Order rejected
             
             self._active_quotes[token_id] = pair
             self._quote_count += 1
@@ -1655,6 +1774,7 @@ class MarketMakerEngine:
                     "price": pair.bid.price,
                     "size": pair.bid.size,
                 })
+                self._log_trade(token_id, "BUY", pair.bid.price, pair.bid.size)
                 logger.info(f"📗 PAPER FILL BUY {pair.bid.size:.0f} @ {pair.bid.price:.3f} (prob={fill_prob:.0%}, dist={bid_distance:.4f})")
             else:
                 logger.debug(f"⛔ BUY fill blocked by inventory limit on {token_id[:8]}")
@@ -1686,20 +1806,52 @@ class MarketMakerEngine:
                     "price": pair.ask.price,
                     "size": pair.ask.size,
                 })
+                self._log_trade(token_id, "SELL", pair.ask.price, pair.ask.size)
                 logger.info(f"📕 PAPER FILL SELL {pair.ask.size:.0f} @ {pair.ask.price:.3f} (prob={fill_prob:.0%}, dist={ask_distance:.4f})")
             else:
                 logger.debug(f"⛔ SELL fill blocked by inventory limit on {token_id[:8]}")
     
+    def _collateral_locked(self) -> float:
+        """Calculate total collateral locked in active BUY orders."""
+        locked = 0.0
+        for pair in self._active_quotes.values():
+            if pair.bid and pair.bid.order_id:
+                locked += pair.bid.price * pair.bid.size
+            if pair.ask and pair.ask.order_id:
+                locked += pair.ask.price * pair.ask.size
+        return locked
+
+    def _log_trade(self, token_id: str, side: str, price: float, size: float, market_name: str = ""):
+        """Log a trade fill for dashboard display."""
+        trade = {
+            "time": time.time(),
+            "token_id": token_id,
+            "side": side,
+            "price": price,
+            "size": size,
+            "notional": round(price * size, 2),
+            "market": market_name or token_id[:16],
+            "engine": "MM",
+            "mode": "PAPER" if self._paper_mode else "LIVE",
+        }
+        self._trade_log.append(trade)
+        if len(self._trade_log) > 200:
+            self._trade_log = self._trade_log[-200:]
+
     async def _cancel_quotes(self, token_id: str):
         """Cancel existing quotes for a token."""
         pair = self._active_quotes.get(token_id)
         if not pair:
             return
-        
+
         if pair.bid and pair.bid.order_id:
+            self._recently_cancelled.add(pair.bid.order_id)
             await self.clob.cancel_order(pair.bid.order_id)
+            pair.bid = None  # Clear immediately to prevent phantom detection
         if pair.ask and pair.ask.order_id:
+            self._recently_cancelled.add(pair.ask.order_id)
             await self.clob.cancel_order(pair.ask.order_id)
+            pair.ask = None  # Clear immediately to prevent phantom detection
     
     # ── Loop 3: Monitor Fills (every 10s) ──
     
@@ -1714,25 +1866,42 @@ class MarketMakerEngine:
                     open_orders = await self.clob.get_open_orders()
                     # Compare with expected orders to detect fills
                     for token_id, pair in self._active_quotes.items():
+                        market_name = next(
+                            (m.question for m in self._active_markets if m.token_id_yes == token_id or m.token_id_no == token_id),
+                            token_id[:16]
+                        )
                         if pair.bid and pair.bid.order_id:
                             if not any(o.get("id") == pair.bid.order_id for o in open_orders):
-                                # Bid order gone — likely filled
-                                self.inventory.record_fill(
-                                    token_id, "BUY", pair.bid.price, pair.bid.size
-                                )
-                                self.riskguard.record_fill(token_id, "BUY", pair.bid.price, pair.bid.size)
-                                self._fill_count += 1
-                                pair.bid = None
+                                if pair.bid.order_id in self._recently_cancelled:
+                                    # Was cancelled by us, NOT a fill
+                                    logger.debug(f"Bid {pair.bid.order_id[:12]} was cancelled, not filled")
+                                    self._recently_cancelled.discard(pair.bid.order_id)
+                                    pair.bid = None
+                                else:
+                                    # Genuinely filled
+                                    self.inventory.record_fill(
+                                        token_id, "BUY", pair.bid.price, pair.bid.size
+                                    )
+                                    self.riskguard.record_fill(token_id, "BUY", pair.bid.price, pair.bid.size)
+                                    self._fill_count += 1
+                                    self._log_trade(token_id, "BUY", pair.bid.price, pair.bid.size, market_name)
+                                    pair.bid = None
 
                         if pair.ask and pair.ask.order_id:
                             if not any(o.get("id") == pair.ask.order_id for o in open_orders):
-                                self.inventory.record_fill(
-                                    token_id, "SELL", pair.ask.price, pair.ask.size
-                                )
-                                self.riskguard.record_fill(token_id, "SELL", pair.ask.price, pair.ask.size)
-                                self._fill_count += 1
-                                self._total_spread_captured += pair.ask.price - pair.fair_value
-                                pair.ask = None
+                                if pair.ask.order_id in self._recently_cancelled:
+                                    logger.debug(f"Ask {pair.ask.order_id[:12]} was cancelled, not filled")
+                                    self._recently_cancelled.discard(pair.ask.order_id)
+                                    pair.ask = None
+                                else:
+                                    self.inventory.record_fill(
+                                        token_id, "SELL", pair.ask.price, pair.ask.size
+                                    )
+                                    self.riskguard.record_fill(token_id, "SELL", pair.ask.price, pair.ask.size)
+                                    self._fill_count += 1
+                                    self._total_spread_captured += pair.ask.price - pair.fair_value
+                                    self._log_trade(token_id, "SELL", pair.ask.price, pair.ask.size, market_name)
+                                    pair.ask = None
                 
                 # Update unrealized PnL for all positions
                 for token_id in list(self._active_quotes.keys()):
@@ -1745,10 +1914,23 @@ class MarketMakerEngine:
                             best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
                             mid = (best_bid + best_ask) / 2
                             self.inventory.update_unrealized(token_id, mid)
-                
+
+                # Refresh actual CLOB balance for collateral checks
+                if not self._paper_mode:
+                    try:
+                        bal = await self.clob.get_balance()
+                        if bal and bal > 0:
+                            self._last_clob_balance = float(bal)
+                    except Exception:
+                        pass
+
+                # Cleanup stale cancelled IDs (keep last 100)
+                if len(self._recently_cancelled) > 100:
+                    self._recently_cancelled = set(list(self._recently_cancelled)[-50:])
+
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}", exc_info=True)
-            
+
             await asyncio.sleep(10)
     
     # ── Loop 4: RiskGuard KPI Evaluation (every 30s) ──
@@ -1795,8 +1977,172 @@ class MarketMakerEngine:
             
             await asyncio.sleep(self.config.ou_recalibrate_secs)
     
+    # ── Loop 6: Exit Rules (SL/TP) ──
+
+    async def _exit_rules_loop(self):
+        """Check positions against stop-loss and take-profit levels."""
+        await asyncio.sleep(45)  # Wait for initial data
+
+        while self._running:
+            try:
+                await self._check_exit_rules()
+            except Exception as e:
+                logger.error(f"Exit rules error: {e}", exc_info=True)
+            await asyncio.sleep(self.config.exit_check_interval)
+
+    async def _check_exit_rules(self):
+        """Evaluate all positions for SL/TP exits."""
+        now = time.time()
+
+        for token_id, pos in list(self.inventory._positions.items()):
+            if pos.net_position < 1:
+                continue  # No position to exit
+
+            # Skip if in cooldown
+            if now - pos.last_exit_time < self.config.exit_cooldown:
+                continue
+
+            # Get current market price
+            mid = await self._get_mid_price(token_id)
+            if mid <= 0:
+                continue
+
+            # Update peak price for trailing stop
+            if mid > pos.peak_price:
+                pos.peak_price = mid
+
+            position_value = pos.net_position * pos.avg_entry
+            current_value = pos.net_position * mid
+            pnl_pct = (mid - pos.avg_entry) / pos.avg_entry if pos.avg_entry > 0 else 0
+
+            market_name = self._token_to_market_name(token_id)
+
+            # ── STOP-LOSS ──
+            if self.config.sl_enabled and pnl_pct <= -self.config.sl_pct:
+                if position_value >= self.config.sl_min_position_value:
+                    loss_usd = position_value - current_value
+                    logger.warning(
+                        f"🛑 STOP-LOSS triggered: {market_name} "
+                        f"entry=${pos.avg_entry:.4f} now=${mid:.4f} "
+                        f"({pnl_pct*100:.1f}%) loss=${loss_usd:.2f}"
+                    )
+                    await self._execute_exit(token_id, pos.net_position, mid, "STOP_LOSS", market_name)
+                    pos.last_exit_time = now
+                    continue
+
+            # ── TRAILING STOP (after TP1 hit) ──
+            if self.config.tp_enabled and pos.tp1_hit and pos.peak_price > 0:
+                trail_trigger = pos.peak_price * (1 - self.config.tp_trailing_pct)
+                if mid <= trail_trigger:
+                    remaining = pos.net_position
+                    logger.info(
+                        f"📉 TRAILING STOP triggered: {market_name} "
+                        f"peak=${pos.peak_price:.4f} now=${mid:.4f} "
+                        f"trail={self.config.tp_trailing_pct*100:.0f}%"
+                    )
+                    await self._execute_exit(token_id, remaining, mid, "TRAILING_STOP", market_name)
+                    pos.last_exit_time = now
+                    continue
+
+            # ── TAKE-PROFIT Level 2: 100% gain → sell 75% ──
+            if self.config.tp_enabled and not pos.tp2_hit and pnl_pct >= self.config.tp_full_pct:
+                sell_size = round(pos.net_position * 0.75, 1)
+                if sell_size >= 1:
+                    logger.info(
+                        f"🎯 TAKE-PROFIT L2 (2x): {market_name} "
+                        f"entry=${pos.avg_entry:.4f} now=${mid:.4f} "
+                        f"({pnl_pct*100:.1f}%) selling 75%"
+                    )
+                    await self._execute_exit(token_id, sell_size, mid, "TP_L2", market_name)
+                    pos.tp2_hit = True
+                    pos.tp1_hit = True
+                    pos.last_exit_time = now
+                    continue
+
+            # ── TAKE-PROFIT Level 1: 50% gain → sell half ──
+            if self.config.tp_enabled and not pos.tp1_hit and pnl_pct >= self.config.tp_pct:
+                sell_size = round(pos.net_position * 0.50, 1)
+                if sell_size >= 1:
+                    logger.info(
+                        f"🎯 TAKE-PROFIT L1 (50%%): {market_name} "
+                        f"entry=${pos.avg_entry:.4f} now=${mid:.4f} "
+                        f"({pnl_pct*100:.1f}%) selling 50%%"
+                    )
+                    await self._execute_exit(token_id, sell_size, mid, "TP_L1", market_name)
+                    pos.tp1_hit = True
+                    pos.peak_price = mid  # Start tracking peak for trailing
+                    pos.last_exit_time = now
+                    continue
+
+    async def _execute_exit(self, token_id: str, size: float, price: float,
+                            reason: str, market_name: str):
+        """Execute an exit sell order."""
+        if self._paper_mode:
+            self.inventory.record_fill(token_id, "SELL", price, size)
+            self._log_trade(token_id, "SELL", price, size, market_name)
+            logger.info(f"📝 PAPER EXIT ({reason}): SELL {size:.1f} @ ${price:.4f} {market_name}")
+            return
+
+        try:
+            # Cancel any existing ask for this token first
+            if token_id in self._active_quotes and self._active_quotes[token_id].ask:
+                ask = self._active_quotes[token_id].ask
+                if ask.order_id:
+                    await self.clob.cancel_order(ask.order_id)
+                self._active_quotes[token_id].ask = None
+
+            # Place aggressive sell (slightly below mid for fast fill)
+            sell_price = round(max(price * 0.99, 0.001), 3)  # 1% below mid
+            order = await self.clob.place_limit_order(
+                token_id, "SELL", sell_price, size, "GTC"
+            )
+            if order:
+                order_id = order if isinstance(order, str) else order.get("id", "")
+                logger.info(
+                    f"🔴 EXIT ORDER ({reason}): SELL {size:.1f} @ ${sell_price:.4f} "
+                    f"{market_name} → {order_id[:20]}"
+                )
+                self.inventory.record_fill(token_id, "SELL", sell_price, size)
+                self._log_trade(token_id, "SELL", sell_price, size, market_name)
+
+                # Telegram alert
+                if self.telegram:
+                    emoji = "🛑" if "STOP" in reason else "🎯"
+                    await self.telegram.send(
+                        f"{emoji} {reason} EXIT\n"
+                        f"Market: {market_name}\n"
+                        f"SELL {size:.1f} @ ${sell_price:.4f}\n"
+                        f"Reason: {reason}"
+                    )
+        except Exception as e:
+            logger.error(f"Exit order failed ({reason}): {e}")
+
+    async def _get_mid_price(self, token_id: str) -> float:
+        """Get current mid price for a token."""
+        try:
+            ob = await self.clob.get_orderbook(token_id)
+            if ob:
+                bids = ob.get("bids", [])
+                asks = ob.get("asks", [])
+                if bids and asks:
+                    best_bid = max(float(b.get("price", 0)) for b in bids)
+                    best_ask = min(float(a.get("price", 0)) for a in asks if float(a.get("price", 0)) > 0)
+                    return (best_bid + best_ask) / 2
+        except Exception:
+            pass
+        return 0.0
+
+    def _token_to_market_name(self, token_id: str) -> str:
+        """Map token_id to market name."""
+        for m in self._active_markets:
+            if m.token_id_yes == token_id:
+                return m.question
+            if m.token_id_no == token_id:
+                return m.question + " (NO)"
+        return token_id[:16] + "..."
+
     # ── Stats & Dashboard ──
-    
+
     def get_stats(self) -> Dict:
         """Full stats snapshot for dashboard / auditor."""
         uptime = time.time() - self._started_at if self._started_at else 0
@@ -1863,6 +2209,7 @@ class MarketMakerEngine:
             },
             "kill_switch": self.inventory.check_kill_switch(),
             "recent_paper_fills": self._paper_fills[-20:] if self._paper_mode else [],
+            "trade_log": self._trade_log[-50:],
             "riskguard": self.riskguard.get_stats(),
         }
     
@@ -1874,6 +2221,7 @@ class MarketMakerEngine:
             "fill_count": self._fill_count,
             "total_spread_captured": self._total_spread_captured,
             "paper_fills": self._paper_fills[-200:],  # Keep last 200 fills
+            "trade_log": self._trade_log[-200:],
             "inventory": self.inventory.save_state(),
         }
     
@@ -1886,6 +2234,7 @@ class MarketMakerEngine:
         self._fill_count = state.get("fill_count", 0)
         self._total_spread_captured = state.get("total_spread_captured", 0.0)
         self._paper_fills = state.get("paper_fills", [])
+        self._trade_log = state.get("trade_log", [])
         if "inventory" in state:
             self.inventory.load_state(state["inventory"])
         logger.info(

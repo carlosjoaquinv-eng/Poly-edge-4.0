@@ -8,6 +8,13 @@ Loads from environment variables with sensible defaults.
 import os
 import logging
 
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    load_dotenv(_env_path)
+except ImportError:
+    pass
+
 from engines.market_maker import MMConfig
 from engines.resolution_sniper_v2 import SniperConfig
 from engines.meta_strategist import MetaConfig
@@ -44,6 +51,10 @@ class Config:
     POLYMARKET_API_KEY: str = ""
     POLYMARKET_API_SECRET: str = ""
     POLYMARKET_API_PASSPHRASE: str = ""
+    POLYMARKET_PROXY_ADDRESS: str = ""   # Proxy wallet for browser-connected wallets
+    RESIDENTIAL_PROXY: str = ""
+    SNIPER_LIVE: bool = False             # Sniper paper by default
+    SIGNATURE_TYPE: int = 0              # 0 = EOA, 1 = proxy
     ANTHROPIC_API_KEY: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
@@ -58,7 +69,10 @@ class Config:
     # ── Dashboard ──
     DASHBOARD_PORT: int = 8081          # v4 on 8081, v3.1 stays on 8080
     DASHBOARD_HOST: str = "0.0.0.0"
-    DASHBOARD_PASSWORD: str = ""        # If set, enables HTTP Basic Auth on dashboard
+    DASHBOARD_PASSWORD: str = ""        # DEPRECATED — use auth module instead
+    DASHBOARD_AUTH: bool = True          # Enable login-based auth (Argon2 + JWT)
+    JWT_SECRET: str = ""                 # Auto-generated if empty
+    SESSION_HOURS: int = 72             # Login session duration
     
     # ── Logging ──
     LOG_LEVEL: str = "INFO"
@@ -92,6 +106,10 @@ class Config:
         self.POLYMARKET_API_KEY = os.environ.get("POLYMARKET_API_KEY", "")
         self.POLYMARKET_API_SECRET = os.environ.get("POLYMARKET_API_SECRET", "")
         self.POLYMARKET_API_PASSPHRASE = os.environ.get("POLYMARKET_API_PASSPHRASE", "")
+        self.POLYMARKET_PROXY_ADDRESS = os.environ.get("POLYMARKET_PROXY_ADDRESS", "")
+        self.RESIDENTIAL_PROXY = os.environ.get("RESIDENTIAL_PROXY", "")
+        self.SNIPER_LIVE = os.environ.get("SNIPER_LIVE", "false").lower() in ("true", "1", "yes")
+        self.SIGNATURE_TYPE = int(os.environ.get("SIGNATURE_TYPE", "0"))
         self.ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
         self.TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self.TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -102,6 +120,9 @@ class Config:
         # Dashboard
         self.DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", str(self.DASHBOARD_PORT)))
         self.DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", self.DASHBOARD_PASSWORD)
+        self.DASHBOARD_AUTH = os.environ.get("DASHBOARD_AUTH", "true").lower() in ("true", "1", "yes")
+        self.JWT_SECRET = os.environ.get("JWT_SECRET", self.JWT_SECRET)
+        self.SESSION_HOURS = int(os.environ.get("SESSION_HOURS", str(self.SESSION_HOURS)))
 
         # Logging
         self.LOG_LEVEL = os.environ.get("LOG_LEVEL", self.LOG_LEVEL)
@@ -117,7 +138,21 @@ class Config:
             self.mm.target_half_spread = float(os.environ["MM_HALF_SPREAD"])
         if os.environ.get("MM_KELLY"):
             self.mm.kelly_fraction = float(os.environ["MM_KELLY"])
-        
+        if os.environ.get("MM_MAX_QUOTE_SIZE"):
+            self.mm.max_quote_size = float(os.environ["MM_MAX_QUOTE_SIZE"])
+        if os.environ.get("MM_QUOTE_REFRESH"):
+            self.mm.quote_refresh_secs = float(os.environ["MM_QUOTE_REFRESH"])
+        if os.environ.get("MM_MIN_SPREAD"):
+            self.mm.min_spread_cents = float(os.environ["MM_MIN_SPREAD"])
+        if os.environ.get("MM_SKEW_FACTOR"):
+            self.mm.inventory_skew_factor = float(os.environ["MM_SKEW_FACTOR"])
+        if os.environ.get("MM_MAX_UNITS"):
+            self.mm.max_units_per_market = float(os.environ["MM_MAX_UNITS"])
+        if os.environ.get("MM_MIN_QUOTE_SIZE"):
+            self.mm.min_quote_size = float(os.environ["MM_MIN_QUOTE_SIZE"])
+        if os.environ.get("MM_MAX_LOSS"):
+            self.mm.max_loss_per_day = float(os.environ["MM_MAX_LOSS"])
+
         # Sniper overrides
         if os.environ.get("SNIPER_MIN_GAP"):
             self.sniper.min_gap_cents = float(os.environ["SNIPER_MIN_GAP"])
