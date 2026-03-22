@@ -11,13 +11,21 @@ Usage:
   feed.has_live_matches()      # True if any matches are live
 
 API: https://v3.football.api-sports.io
-Free tier: 100 requests/day — we poll every 15s when live, 120s idle.
+Free tier: 100 requests/day — smart rate-limit recovery with budget tracking.
+
+Rate-limit strategy:
+  - Track daily request budget (max 90 to leave headroom)
+  - On 429 / rate-limit error: back off 30 min, then retry
+  - Idle polling: every 5 min (was 2 min) to conserve budget
+  - Live polling: max 4 matches per cycle (was 8) with 2s gaps
+  - Budget exhausted: sleep until midnight UTC reset
 """
 
 import asyncio
 import aiohttp
 import logging
 import time
+import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from enum import Enum
@@ -123,6 +131,15 @@ class FootballFeed:
         self._request_count = 0
         self._last_fixtures_fetch = 0.0
         self._fixtures_cache_ttl = 300  # 5 min
+
+        # ── Rate-limit recovery ──
+        self._rate_limited_until = 0.0       # Timestamp when backoff expires (0 = not limited)
+        self._daily_budget = 90              # Max requests/day (leave 10 headroom from 100)
+        self._daily_requests = 0             # Requests made today
+        self._budget_reset_date = self._today_utc()  # Reset counter at midnight UTC
+        self._backoff_duration = 1800        # 30 min backoff on rate limit (was infinite)
+        self._consecutive_429s = 0           # Track repeated rate limits
+        self._first_poll_done = False        # First poll: seed seen_events, don't emit
     
     @property
     def headers(self) -> Dict:
@@ -136,33 +153,70 @@ class FootballFeed:
             self._session = aiohttp.ClientSession(headers=self.headers)
         return self._session
     
+    @staticmethod
+    def _today_utc() -> str:
+        return datetime.datetime.utcnow().strftime("%Y-%m-%d")
+
+    def _check_budget(self) -> bool:
+        """Check if we have API budget remaining. Resets at midnight UTC."""
+        today = self._today_utc()
+        if today != self._budget_reset_date:
+            logger.info(f"Daily budget reset: {self._daily_requests} requests used yesterday")
+            self._daily_requests = 0
+            self._budget_reset_date = today
+            self._consecutive_429s = 0  # Fresh day, reset backoff tracking
+        return self._daily_requests < self._daily_budget
+
+    def _apply_rate_limit_backoff(self, reason: str):
+        """Apply progressive backoff instead of permanent disable."""
+        self._consecutive_429s += 1
+        # Progressive backoff: 30min, 1h, 2h, max 4h
+        backoff = min(self._backoff_duration * (2 ** (self._consecutive_429s - 1)), 14400)
+        self._rate_limited_until = time.time() + backoff
+        remaining = self._daily_budget - self._daily_requests
+        logger.warning(
+            f"Football feed rate-limited ({reason}) — backing off {backoff/60:.0f}min. "
+            f"Budget: {self._daily_requests}/{self._daily_budget} used, "
+            f"retries: {self._consecutive_429s}"
+        )
+
     async def _api_get(self, endpoint: str, params: Dict = None) -> Optional[Dict]:
-        """Make API request with error handling."""
-        # Skip if rate limited
-        if hasattr(self, '_rate_limited_until') and time.time() < self._rate_limited_until:
+        """Make API request with smart rate-limit recovery."""
+        now = time.time()
+
+        # Check backoff timer (recoverable, not permanent)
+        if now < self._rate_limited_until:
+            remaining = (self._rate_limited_until - now) / 60
+            logger.debug(f"Football feed in backoff — {remaining:.0f}min remaining")
             return None
-        
+
+        # Check daily budget
+        if not self._check_budget():
+            logger.debug(f"Football feed daily budget exhausted ({self._daily_requests}/{self._daily_budget})")
+            return None
+
         session = await self._get_session()
         url = f"{API_BASE}/{endpoint}"
         try:
             async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 self._request_count += 1
+                self._daily_requests += 1
+
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("errors"):
                         err = data['errors']
                         err_str = str(err).lower()
                         if 'ratelimit' in err_str or 'rate limit' in err_str or 'too many' in err_str or 'requests' in err_str:
-                            # Rate limited — disable feed until restart or Pro upgrade
-                            self._rate_limited_until = float('inf')
-                            logger.warning(f"API rate limit reached — football feed DISABLED (free tier exhausted). Upgrade to Pro for continued use.")
+                            self._apply_rate_limit_backoff("API error response")
                         else:
                             logger.warning(f"API error: {err}")
                         return None
+                    # Success — reset consecutive 429 counter
+                    self._consecutive_429s = 0
                     return data
                 elif resp.status == 429:
-                    self._rate_limited_until = float('inf')
-                    logger.warning("API rate limit hit — football feed DISABLED")
+                    self._apply_rate_limit_backoff("HTTP 429")
                     return None
                 else:
                     logger.warning(f"API returned {resp.status}")
@@ -194,34 +248,43 @@ class FootballFeed:
             await self._refresh_fixtures()
             self._last_fixtures_fetch = now
         
-        # Poll events for each live match (rate-limited: max 8 per cycle, 1s gap)
+        # Poll events for each live match (budget-aware: max 4 per cycle, 2s gap)
         polled = 0
-        max_per_cycle = 8  # Reserve 2 req/min for fixtures
+        max_per_cycle = 4  # Conservative: save budget for fixtures refresh
         for fid, match in list(self._matches.items()):
             if match.status in ("FT", "AET", "PEN", "CANC", "PST", "ABD"):
                 continue
-            
+
             if polled >= max_per_cycle:
                 break
-            
+
+            # Skip if budget is low
+            if not self._check_budget():
+                break
+
             new_events = await self._poll_match_events(match)
             events.extend(new_events)
             polled += 1
-            
-            # Rate limit: 1 second between API calls
+
+            # Rate limit: 2 seconds between API calls (was 1s)
             if polled < max_per_cycle:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.0)
             
             # Also check status transitions (no API call)
             status_events = await self._check_status_change(match)
             events.extend(status_events)
         
+        # Mark first poll done — future polls will emit events
+        if not self._first_poll_done and polled > 0:
+            self._first_poll_done = True
+            logger.info(f"First poll: seeded {sum(len(m.seen_event_ids) for m in self._matches.values())} existing events (suppressed)")
+
         # Clean up finished matches (keep for 30 min)
         finished = [fid for fid, m in self._matches.items()
                     if m.status in ("FT", "AET", "PEN") and now - m.started_at > 1800]
         for fid in finished:
             del self._matches[fid]
-        
+
         return events
     
     async def _refresh_fixtures(self):
@@ -269,17 +332,21 @@ class FootballFeed:
         data = await self._api_get("fixtures/events", {"fixture": match.fixture_id})
         if not data or not data.get("response"):
             return []
-        
+
         events = []
         all_events = data["response"]
-        
+
         for ev in all_events:
             # Create unique ID for dedup
             ev_id = f"{match.fixture_id}_{ev['time']['elapsed']}_{ev['type']}_{ev['player']['id']}"
-            
+
             if ev_id in match.seen_event_ids:
                 continue
             match.seen_event_ids.add(ev_id)
+
+            # First poll: seed dedup set but don't emit (avoids stale events on restart)
+            if not self._first_poll_done:
+                continue
             
             # Map API event to our type
             event_type = API_EVENT_MAP.get(ev["type"])

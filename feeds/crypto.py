@@ -55,13 +55,16 @@ PUMP_DUMP_5MIN_PCT = 2.0      # 2% in 5 min → event
 PUMP_DUMP_1HR_PCT = 5.0       # 5% in 1 hour → event
 PUMP_DUMP_15MIN_PCT = 3.0     # 3% in 15 min → event
 
-# Round number thresholds for BTC/ETH/SOL
+# Round number thresholds — covers major Polymarket crypto markets
 THRESHOLD_MAP = {
     "BTCUSDT": [50000, 60000, 70000, 75000, 80000, 85000, 90000, 95000,
                 100000, 110000, 120000, 150000, 200000],
     "ETHUSDT": [1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000,
                 6000, 7000, 8000, 10000],
     "SOLUSDT": [50, 75, 100, 125, 150, 175, 200, 250, 300, 400, 500],
+    "DOGEUSDT": [0.10, 0.15, 0.20, 0.25, 0.30, 0.50, 1.00],
+    "XRPUSDT": [0.50, 1.00, 1.50, 2.00, 2.50, 3.00, 5.00],
+    "SUIUSDT": [1.00, 2.00, 3.00, 5.00, 10.00],
 }
 
 # Cooldown: don't emit same event within this window
@@ -72,6 +75,9 @@ SYMBOL_KEYWORDS = {
     "BTCUSDT": ["bitcoin", "btc", "crypto"],
     "ETHUSDT": ["ethereum", "eth", "ether", "crypto"],
     "SOLUSDT": ["solana", "sol", "crypto"],
+    "DOGEUSDT": ["dogecoin", "doge", "crypto"],
+    "XRPUSDT": ["xrp", "ripple", "crypto"],
+    "SUIUSDT": ["sui", "crypto"],
 }
 
 WS_URL = "wss://stream.binance.us:9443/ws"
@@ -111,7 +117,7 @@ class CryptoFeed:
     """
     
     def __init__(self, symbols: List[str] = None):
-        self.symbols = symbols or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+        self.symbols = symbols or ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT", "SUIUSDT"]
         self._states: Dict[str, SymbolState] = {
             s: SymbolState(symbol=s) for s in self.symbols
         }
