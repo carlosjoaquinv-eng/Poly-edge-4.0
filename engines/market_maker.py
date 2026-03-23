@@ -58,11 +58,13 @@ class Quote:
 
 @dataclass
 class QuotePair:
-    """Bid + ask quotes for a single market."""
+    """Bid + ask quotes for a single market (multi-level)."""
     token_id: str
     condition_id: str
     bid: Optional[Quote] = None
     ask: Optional[Quote] = None
+    extra_bids: List[Quote] = field(default_factory=list)  # Deeper bid levels
+    extra_asks: List[Quote] = field(default_factory=list)  # Deeper ask levels
     fair_value: float = 0.5
     last_update: float = 0.0
 
@@ -143,6 +145,21 @@ class MMConfig:
     target_half_spread: float = 0.015   # 1.5¢ each side (competitive in 3-5¢ spread markets)
     breakeven_floor: bool = True         # Never sell below avg_entry + fees
     breakeven_min_margin: float = 0.005  # 0.5¢ minimum profit above entry (covers fees)
+
+    # ── Multi-level quoting ──
+    quote_levels: int = 3                    # 3 BID + 3 ASK levels per market
+    level_spacing_pct: float = 0.005         # 0.5% between levels
+    level_size_decay: float = 0.6            # Each deeper level = 60% of previous size
+
+    # ── Volume decay ──
+    volume_decay_enabled: bool = True
+    volume_decay_threshold: float = 0.50     # If volume < 50% of 24h avg, reduce
+    volume_decay_min_factor: float = 0.3     # Reduce size to min 30%
+
+    # ── Time proximity sizing ──
+    time_proximity_enabled: bool = True
+    time_proximity_hours: float = 48.0       # Start reducing at 48h before resolution
+    time_proximity_min_factor: float = 0.25  # Reduce to 25% at resolution
     min_quote_size: float = 5.0        # $10 minimum quote size
     max_quote_size: float = 5.0        # $50 maximum quote size
     quote_refresh_secs: float = 30.0    # Re-quote every 30s
@@ -1338,6 +1355,37 @@ class QuoteGenerator:
             last_update=time.time(),
         )
 
+        # ── Multi-level quoting: add deeper BID/ASK levels ──
+        if self.config.quote_levels > 1:
+            for lvl in range(1, self.config.quote_levels):
+                spacing = self.config.level_spacing_pct * lvl
+                size_factor = self.config.level_size_decay ** lvl
+                lvl_size = max(5.0, round(size * size_factor, 1))
+
+                # Deeper bid (lower price)
+                lvl_bid_price = round(bid_price - bid_price * spacing, 3)
+                lvl_bid_price = max(0.01, lvl_bid_price)
+                if rg_action != RiskAction.ONESIDE or (pos.net_position <= 0):
+                    if self.inventory.can_buy(token_id, lvl_size, lvl_bid_price):
+                        pair.extra_bids.append(Quote(
+                            token_id=token_id, side=QuoteSide.BID,
+                            price=lvl_bid_price, size=lvl_size
+                        ))
+
+                # Deeper ask (higher price)
+                lvl_ask_price = round(ask_price + ask_price * spacing, 3)
+                lvl_ask_price = min(0.99, lvl_ask_price)
+                # Respect breakeven floor on deeper levels too
+                if self.config.breakeven_floor and pos.net_position > 0 and pos.avg_entry > 0:
+                    min_lvl_ask = pos.avg_entry + self.config.breakeven_min_margin
+                    lvl_ask_price = max(lvl_ask_price, round(min_lvl_ask, 3))
+                if rg_action != RiskAction.ONESIDE or (pos.net_position >= 0):
+                    if self.inventory.can_sell(token_id, lvl_size, lvl_ask_price):
+                        pair.extra_asks.append(Quote(
+                            token_id=token_id, side=QuoteSide.ASK,
+                            price=lvl_ask_price, size=lvl_size
+                        ))
+
         # ── Inventory-aware enforcement ──
         # If we have ANY inventory >= 5 shares, ALWAYS place SELL to close
         if pos.net_position >= 5 and ask_quote is None and rg_action != RiskAction.HALT_MARKET:
@@ -1699,12 +1747,75 @@ class MarketMakerEngine:
         self.ou.record_price(token_id, mid)
         self.hmm.record_price(token_id, mid)
         
+        # ── Volume decay: reduce size if market volume dropped ──
+        volume_factor = 1.0
+        if self.config.volume_decay_enabled and hasattr(market, 'volume_24h') and market.volume_24h > 0:
+            # Compare current 1h volume pace vs 24h average
+            # If volume_24h is low relative to market cap, reduce exposure
+            if market.volume_24h < market.liquidity * 0.01:  # Less than 1% turnover
+                volume_factor = max(self.config.volume_decay_min_factor, market.volume_24h / max(market.liquidity * 0.01, 1))
+                if volume_factor < 0.9:
+                    logger.debug(f"📉 Volume decay: {market.question[:30]} vol_factor={volume_factor:.2f}")
+
+        # ── Time proximity: reduce size near resolution ──
+        time_factor = 1.0
+        if self.config.time_proximity_enabled and hasattr(market, 'hours_to_resolution'):
+            hrs = market.hours_to_resolution
+            if 0 < hrs < self.config.time_proximity_hours:
+                # Linear decay from 1.0 at 48h to min_factor at 0h
+                time_factor = max(
+                    self.config.time_proximity_min_factor,
+                    hrs / self.config.time_proximity_hours
+                )
+                if time_factor < 0.9:
+                    logger.debug(f"⏰ Time proximity: {market.question[:30]} {hrs:.0f}h left, factor={time_factor:.2f}")
+
         # Generate new quotes (with RiskGuard integration)
         pair = self.quote_gen.generate_quotes(token_id, mid, riskguard=self.riskguard)
         pair.condition_id = market.condition_id
         
+        # Apply volume + time factors to quote sizes
+        size_factor = volume_factor * time_factor
+        if size_factor < 0.95:
+            if pair.bid:
+                pair.bid.size = max(5.0, round(pair.bid.size * size_factor, 1))
+            if pair.ask:
+                pair.ask.size = max(5.0, round(pair.ask.size * size_factor, 1))
+            for eb in pair.extra_bids:
+                eb.size = max(5.0, round(eb.size * size_factor, 1))
+            for ea in pair.extra_asks:
+                ea.size = max(5.0, round(ea.size * size_factor, 1))
+
         if self._paper_mode:
             # Paper mode: just track quotes, simulate fills
+            # ── Place extra levels (multi-level quoting) ──
+            for extra_bid in pair.extra_bids:
+                extra_bid.size = max(5.0, extra_bid.size)
+                cost = extra_bid.price * extra_bid.size
+                if cost > available or cost < 1.0:
+                    continue
+                order = await self.clob.place_limit_order(
+                    token_id=token_id, side="BUY",
+                    price=extra_bid.price, size=extra_bid.size,
+                )
+                if order:
+                    extra_bid.order_id = order.get("id")
+                    extra_bid.placed_at = time.time()
+                    available -= cost
+
+            for extra_ask in pair.extra_asks:
+                extra_ask.size = max(5.0, extra_ask.size)
+                cost = extra_ask.price * extra_ask.size
+                if cost > available or cost < 1.0:
+                    continue
+                order = await self.clob.place_limit_order(
+                    token_id=token_id, side="SELL",
+                    price=extra_ask.price, size=extra_ask.size,
+                )
+                if order:
+                    extra_ask.order_id = order.get("id")
+                    extra_ask.placed_at = time.time()
+
             self._active_quotes[token_id] = pair
             self._simulate_fills(token_id, pair, best_bid, best_ask)
             self._quote_count += 1
@@ -1925,7 +2036,21 @@ class MarketMakerEngine:
             pair.ask = None  # Clear immediately to prevent phantom detection
     
     # ── Loop 3: Monitor Fills (every 10s) ──
-    
+        # Cancel extra levels
+        if pair:
+            for eb in getattr(pair, 'extra_bids', []):
+                if eb.order_id:
+                    try:
+                        await self.clob.cancel_order(eb.order_id)
+                    except Exception:
+                        pass
+            for ea in getattr(pair, 'extra_asks', []):
+                if ea.order_id:
+                    try:
+                        await self.clob.cancel_order(ea.order_id)
+                    except Exception:
+                        pass
+
     async def _monitor_loop(self):
         """Check for fills and update state."""
         await asyncio.sleep(20)
