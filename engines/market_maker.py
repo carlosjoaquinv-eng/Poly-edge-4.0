@@ -484,6 +484,16 @@ class InventoryManager:
             logger.debug(f"⛔ SELL blocked: want {size:.0f} but only have {pos.net_position:.0f}")
             return False
 
+        # ── Loss protection: never sell at catastrophic loss ──
+        # Prevents cross-market inventory confusion from causing huge losses
+        if pos.avg_entry > 0 and price > 0:
+            loss_pct = (price - pos.avg_entry) / pos.avg_entry
+            if loss_pct < -0.50:  # Never sell at >50% loss via MM
+                logger.warning(
+                    f"⛔ SELL blocked: price ${price:.4f} is {loss_pct:.0%} below avg ${pos.avg_entry:.4f} — catastrophic loss protection"
+                )
+                return False
+
         new_position = pos.net_position - size
 
         # ── HARD UNIT CAP (RiskGuard fix #1) ──
@@ -1671,6 +1681,10 @@ class MarketMakerEngine:
                 # Enforce Polymarket minimum 5 shares
                 pair.bid.size = max(5.0, pair.bid.size)  # Polymarket min 5 shares
                 order_cost = pair.bid.price * pair.bid.size
+                # Polymarket rejects marketable orders < $1
+                if order_cost < 1.0:
+                    pair.bid.size = max(pair.bid.size, 1.0 / pair.bid.price + 1)
+                    order_cost = pair.bid.price * pair.bid.size
                 if order_cost > available:
                     logger.debug(f"⛔ BID skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
                     pair.bid = None
@@ -1691,6 +1705,10 @@ class MarketMakerEngine:
             if pair.ask:
                 pair.ask.size = max(5.0, pair.ask.size)  # Polymarket min 5 shares
                 order_cost = pair.ask.price * pair.ask.size
+                # Polymarket rejects marketable orders < $1
+                if order_cost < 1.0:
+                    pair.ask.size = max(pair.ask.size, 1.0 / pair.ask.price + 1)
+                    order_cost = pair.ask.price * pair.ask.size
                 if order_cost > available:
                     logger.debug(f"⛔ ASK skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
                     pair.ask = None

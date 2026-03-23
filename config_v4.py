@@ -20,6 +20,89 @@ from engines.resolution_sniper_v2 import SniperConfig
 from engines.meta_strategist import MetaConfig
 
 
+# ─── Risk Profiles ──────────────────────────────────────────
+RISK_PROFILES = {
+    "conservative": {
+        "label": "Conservative",
+        "description": "Capital preservation — small trades, high reserve",
+        "mm": {
+            "kelly_fraction": 0.15,
+            "max_quote_size": 5.0,
+            "max_markets": 2,
+            "max_position_per_market": 30.0,
+            "max_total_inventory": 100.0,
+            "max_loss_per_day": 15.0,
+        },
+        "sniper": {
+            "kelly_fraction": 0.20,
+            "max_trade_size": 25.0,
+            "max_total_exposure": 150.0,
+            "max_concurrent_trades": 3,
+            "min_gap_cents": 8.0,
+            "min_edge_pct": 8.0,
+        },
+        "risk": {
+            "risk_pct": 1.5,
+            "max_exposure_pct": 40.0,
+            "reserve_pct": 30.0,
+            "max_single_market_pct": 10.0,
+        },
+    },
+    "balanced": {
+        "label": "Balanced",
+        "description": "Default — moderate risk, steady growth",
+        "mm": {
+            "kelly_fraction": 0.25,
+            "max_quote_size": 15.0,
+            "max_markets": 4,
+            "max_position_per_market": 75.0,
+            "max_total_inventory": 300.0,
+            "max_loss_per_day": 40.0,
+        },
+        "sniper": {
+            "kelly_fraction": 0.30,
+            "max_trade_size": 50.0,
+            "max_total_exposure": 300.0,
+            "max_concurrent_trades": 6,
+            "min_gap_cents": 5.0,
+            "min_edge_pct": 5.0,
+        },
+        "risk": {
+            "risk_pct": 3.0,
+            "max_exposure_pct": 65.0,
+            "reserve_pct": 15.0,
+            "max_single_market_pct": 20.0,
+        },
+    },
+    "aggressive": {
+        "label": "Aggressive",
+        "description": "Max growth — bigger trades, less reserve",
+        "mm": {
+            "kelly_fraction": 0.40,
+            "max_quote_size": 30.0,
+            "max_markets": 6,
+            "max_position_per_market": 150.0,
+            "max_total_inventory": 500.0,
+            "max_loss_per_day": 80.0,
+        },
+        "sniper": {
+            "kelly_fraction": 0.50,
+            "max_trade_size": 75.0,
+            "max_total_exposure": 500.0,
+            "max_concurrent_trades": 10,
+            "min_gap_cents": 3.0,
+            "min_edge_pct": 3.0,
+        },
+        "risk": {
+            "risk_pct": 5.0,
+            "max_exposure_pct": 85.0,
+            "reserve_pct": 5.0,
+            "max_single_market_pct": 30.0,
+        },
+    },
+}
+
+
 class Config:
     """
     Master configuration for PolyEdge v4.
@@ -32,6 +115,7 @@ class Config:
     
     # ── Mode ──
     PAPER_MODE: bool = True
+    RISK_PROFILE: str = "balanced"  # conservative / balanced / aggressive
     
     # ── Identity ──
     VERSION: str = "4.0.0"
@@ -92,6 +176,9 @@ class Config:
         self.sniper = SniperConfig()
         self.meta = MetaConfig()
         self._load_env()
+        # Apply risk profile AFTER env overrides (profile sets baseline, env can still override)
+        self.RISK_PROFILE = os.environ.get("RISK_PROFILE", self.RISK_PROFILE).lower()
+        self.apply_profile(self.RISK_PROFILE)
     
     def _load_env(self):
         """Load configuration from environment variables."""
@@ -177,6 +264,33 @@ class Config:
         if os.environ.get("META_ROLLBACK_LOSS_PCT"):
             self.meta.auto_rollback_loss_pct = float(os.environ["META_ROLLBACK_LOSS_PCT"])
     
+    def apply_profile(self, name: str):
+        """Apply a risk profile, overriding MM and Sniper config values."""
+        name = name.lower()
+        if name not in RISK_PROFILES:
+            logging.warning(f"Unknown risk profile '{name}', using 'balanced'")
+            name = "balanced"
+
+        self.RISK_PROFILE = name
+        profile = RISK_PROFILES[name]
+
+        # Apply MM overrides
+        for key, value in profile.get("mm", {}).items():
+            if hasattr(self.mm, key):
+                setattr(self.mm, key, value)
+
+        # Apply Sniper overrides
+        for key, value in profile.get("sniper", {}).items():
+            if hasattr(self.sniper, key):
+                setattr(self.sniper, key, value)
+
+        logging.info(f"Risk profile applied: {profile.get('label', name)} — {profile.get('description', '')}")
+
+    def get_risk_params(self) -> dict:
+        """Get current risk parameters from active profile."""
+        profile = RISK_PROFILES.get(self.RISK_PROFILE, RISK_PROFILES["balanced"])
+        return profile.get("risk", {})
+
     def validate(self) -> list:
         """Validate config and return list of warnings."""
         warnings = []
@@ -204,9 +318,10 @@ class Config:
     def summary(self) -> str:
         """Human-readable config summary."""
         mode = "PAPER" if self.PAPER_MODE else "🔴 LIVE"
+        profile_label = RISK_PROFILES.get(self.RISK_PROFILE, {}).get("label", self.RISK_PROFILE)
         return (
             f"PolyEdge v{self.VERSION} — {mode}\n"
-            f"Bankroll: ${self.BANKROLL:,.0f}\n"
+            f"Bankroll: ${self.BANKROLL:,.0f} | Risk Profile: {profile_label}\n"
             f"─── Market Maker ───\n"
             f"  Max markets: {self.mm.max_markets}\n"
             f"  Position limit: ${self.mm.max_position_per_market}/market, ${self.mm.max_total_inventory} total\n"

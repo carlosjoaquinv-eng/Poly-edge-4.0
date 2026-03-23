@@ -332,11 +332,17 @@ class MarketMapper:
         elif event.source == "crypto":
             self._match_crypto_event(event, candidates)
         
-        # Keyword fallback for all event types
-        self._match_keywords(event, candidates)
+        # Keyword fallback ONLY for sources without dedicated matchers
+        # Football and crypto have specific matchers — fuzzy keywords cause false matches
+        # (e.g., "league" in football keywords matching "NBA Finals League")
+        if event.source not in ("football", "crypto"):
+            self._match_keywords(event, candidates)
         
         # Sort by relevance, return mappings
-        sorted_cids = sorted(candidates.keys(), key=lambda c: candidates[c], reverse=True)
+        # Require minimum score of 5.0 — prevents weak substring matches
+        MIN_MATCH_SCORE = 5.0
+        qualified = {cid: score for cid, score in candidates.items() if score >= MIN_MATCH_SCORE}
+        sorted_cids = sorted(qualified.keys(), key=lambda c: qualified[c], reverse=True)
         results = []
         for cid in sorted_cids[:10]:  # Top 10 matches
             mapping = self._markets.get(cid)
