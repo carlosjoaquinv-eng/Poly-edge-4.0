@@ -4942,6 +4942,12 @@ async function refreshPositions() {
             '<button class="sell-btn" onclick="sellPosition(\'' + p.token_id + '\',' + p.size + ',\'' + title.replace(/'/g, '') + '\', this)">SELL</button>' +
           '</div>' +
         '</div>' +
+        (p.end_date ? '<div style="display:flex;justify-content:space-between;padding:4px 12px 8px;font-size:10px;color:var(--text-3);">' +
+          '<span>' + (p.days_held > 0 ? p.days_held + 'd held' : '') + '</span>' +
+          '<span style="color:' + (p.is_expired ? 'var(--red)' : p.days_to_resolve !== null && p.days_to_resolve <= 7 ? 'var(--gold)' : 'var(--text-3)') + '">' +
+            (p.is_expired ? 'EXPIRED' : p.days_to_resolve !== null ? (p.days_to_resolve === 0 ? 'Resolves TODAY' : p.days_to_resolve + 'd to resolve') : p.end_date) +
+          '</span>' +
+        '</div>' : '') +
       '</div>';
     }).join('');
 
