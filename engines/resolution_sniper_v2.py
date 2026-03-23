@@ -26,6 +26,12 @@ import math
 import time
 import random
 import logging
+
+try:
+    from engine.core.liquidity_checker import LiquidityChecker, LiquidityConfig
+    _HAS_LIQUIDITY_CHECKER = True
+except ImportError:
+    _HAS_LIQUIDITY_CHECKER = False
 from typing import Dict, List, Optional, Tuple, Set, Callable
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -1277,6 +1283,26 @@ class ResolutionSniperV2:
         # Compute size
         size = self.executor.compute_size(signal)
         
+        # ── LIQUIDITY CHECK before entering ──
+        if _HAS_LIQUIDITY_CHECKER and hasattr(self, 'clob') and self.clob:
+            try:
+                ob = await self.clob.get_orderbook(signal.token_id)
+                if ob:
+                    liq_checker = LiquidityChecker(LiquidityConfig(
+                        min_exit_depth_usd=20.0,
+                        min_depth_multiple=2.0,
+                        max_exit_slippage_pct=10.0,
+                    ))
+                    liq = liq_checker.analyze(ob, "buy", size, signal.current_price)
+                    if not liq.safe_to_enter:
+                        logger.info(
+                            f"⛔ SNIPER LIQUIDITY BLOCK: {signal.market_question[:40]} — "
+                            f"{liq.reason} (score {liq.overall_score}/100)"
+                        )
+                        return
+            except Exception as e:
+                logger.debug(f"Liquidity check skipped: {e}")
+
         # Stealth delay
         delay_ms = self.config.execution_delay_ms + random.randint(
             -self.config.time_jitter_ms, self.config.time_jitter_ms

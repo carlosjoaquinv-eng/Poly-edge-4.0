@@ -20,6 +20,12 @@ import time
 import random
 from engine.core.hmm_regime import RegimeDetector, RegimeConfig
 import logging
+
+try:
+    from engine.core.liquidity_checker import LiquidityChecker, LiquidityConfig
+    _HAS_LIQUIDITY_CHECKER = True
+except ImportError:
+    _HAS_LIQUIDITY_CHECKER = False
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -1440,6 +1446,22 @@ class MarketMakerEngine:
         # Stats
         self._started_at = 0.0
         self._quote_count = 0
+
+        # Liquidity checker — prevents entering illiquid markets
+        if _HAS_LIQUIDITY_CHECKER:
+            self._liquidity_checker = LiquidityChecker(LiquidityConfig(
+                min_exit_depth_usd=10.0,     # At least $10 exit depth
+                min_depth_multiple=1.5,       # Exit depth >= 1.5x our trade
+                max_exit_slippage_pct=15.0,   # Max 15% slippage
+                max_spread_pct=20.0,          # Max 20% spread
+                min_exit_levels=1,            # At least 1 exit level
+                min_depth_ratio=0.0,          # Disabled — Polymarket books are naturally asymmetric
+                max_depth_ratio=999.0,        # Disabled
+                dust_filter_usd=0.10,
+            ))
+            logger.info("Liquidity checker enabled")
+        else:
+            self._liquidity_checker = None
         self._fill_count = 0
         self._recently_cancelled = set()  # Order IDs we cancelled (not filled)
         self._total_spread_captured = 0.0
@@ -1689,6 +1711,16 @@ class MarketMakerEngine:
         else:
             # Live mode: cancel old quotes, place new ones
             await self._cancel_quotes(token_id)
+
+            # ── LIQUIDITY CHECK before placing orders ──
+            if self._liquidity_checker and ob:
+                liq = self._liquidity_checker.analyze(ob, "buy", pair.bid.size if pair.bid else 0, mid)
+                if not liq.safe_to_enter and pair.bid:
+                    logger.info(
+                        f"⛔ LIQUIDITY BLOCK: {token_id[:8]}... — {liq.reason} "
+                        f"(score {liq.overall_score}/100, exit_depth ${liq.exit_depth_usd:.0f})"
+                    )
+                    pair.bid = None  # Don't place BUY if we can't exit
 
             # Check available collateral before placing
             locked = self._collateral_locked()
