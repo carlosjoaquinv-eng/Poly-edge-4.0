@@ -135,6 +135,8 @@ class MMConfig:
 
     # Quoting
     target_half_spread: float = 0.015   # 1.5¢ each side (competitive in 3-5¢ spread markets)
+    breakeven_floor: bool = True         # Never sell below avg_entry + fees
+    breakeven_min_margin: float = 0.005  # 0.5¢ minimum profit above entry (covers fees)
     min_quote_size: float = 5.0        # $10 minimum quote size
     max_quote_size: float = 5.0        # $50 maximum quote size
     quote_refresh_secs: float = 30.0    # Re-quote every 30s
@@ -1253,6 +1255,19 @@ class QuoteGenerator:
         elif deviation and deviation < -1.5:
             ask_price += ou_adjustment
 
+        # ── BREAKEVEN FLOOR ──
+        # Never place ASK below avg_entry + margin (prevent selling at a loss)
+        if self.config.breakeven_floor:
+            pos = self.inventory.get_position(token_id)
+            if pos.net_position > 0 and pos.avg_entry > 0:
+                min_ask = pos.avg_entry + self.config.breakeven_min_margin
+                if ask_price < min_ask:
+                    logger.debug(
+                        f"🛡️ BREAKEVEN FLOOR: ask {ask_price:.3f} < entry {pos.avg_entry:.3f} + "
+                        f"{self.config.breakeven_min_margin:.3f} margin → raised to {min_ask:.3f}"
+                    )
+                    ask_price = min_ask
+
         # Clamp to valid range
         bid_price = max(0.01, min(0.98, round(bid_price, 3)))
         ask_price = max(0.02, min(0.99, round(ask_price, 3)))
@@ -1323,6 +1338,12 @@ class QuoteGenerator:
             inv_ratio = pos.net_position / max(self.config.max_units_per_market, 1)
             aggressive_ask = round(fair_value + half_spread * 0.3, 3)
             aggressive_ask = max(aggressive_ask, 0.01)
+            # Respect breakeven floor even in Force ASK mode
+            if self.config.breakeven_floor and pos.avg_entry > 0:
+                min_force_ask = pos.avg_entry + self.config.breakeven_min_margin
+                if aggressive_ask < min_force_ask:
+                    aggressive_ask = round(min_force_ask, 3)
+                    logger.debug(f"🛡️ Force ASK raised to breakeven: {aggressive_ask:.3f}")
             ask_size = max(5.0, min(size, pos.net_position))  # Floor at 5 shares
             ask_quote = Quote(token_id=token_id, side=QuoteSide.ASK,
                              price=aggressive_ask, size=round(ask_size, 1))
