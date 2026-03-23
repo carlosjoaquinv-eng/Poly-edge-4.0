@@ -145,6 +145,7 @@ class Config:
     
     # ── Feeds ──
     FOOTBALL_API_KEY: str = ""
+    WEATHER_API_KEY: str = ""
     FOOTBALL_POLL_LIVE: int = 15        # seconds
     FOOTBALL_POLL_IDLE: int = 120       # seconds
     CRYPTO_POLL_INTERVAL: int = 5       # seconds
@@ -171,7 +172,7 @@ class Config:
     meta: MetaConfig = None
     
     def __init__(self):
-        self.CRYPTO_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+        self.CRYPTO_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT", "SUIUSDT"]
         self.mm = MMConfig()
         self.sniper = SniperConfig()
         self.meta = MetaConfig()
@@ -203,6 +204,7 @@ class Config:
         
         # Feeds
         self.FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "")
+        self.WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "")
         
         # Dashboard
         self.DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", str(self.DASHBOARD_PORT)))
