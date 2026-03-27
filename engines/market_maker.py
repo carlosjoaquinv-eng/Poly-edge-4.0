@@ -137,6 +137,7 @@ class MMConfig:
     # Market selection
     min_liquidity: float = 1_000        # $5K minimum market liquidity (sports markets have less)
     min_spread_cents: float = 0.1       # 1.5¢ minimum spread — filter out unprofitable tight markets
+    min_fair_value: float = 0.03         # Skip markets with fair value < 3¢ (dust/dead)
     max_spread_cents: float = 8.0       # >8¢ = dead market, toxic flow risk
     min_hours_to_resolution: float = 24   # 24 hours minimum (allow closer to resolution)
     max_markets: int = 8                # Max simultaneous markets
@@ -1109,6 +1110,10 @@ class SpreadAnalyzer:
         fees = 2 * self.config.fee_rate * mid  # Both sides
         net_spread = gross_spread - fees
         # Cap reward: 3-5¢ net spread is ideal, >10¢ is suspicious (dead market)
+        # Zero volume = dead market, hard skip
+        if market.volume_24h < 50.0:
+            return -999.0  # Hard reject: no volume = no fills
+
         if net_spread > 0.10:  # >10¢ net spread = dead market, penalize
             spread_score = max(0, 0.5 - (net_spread - 0.10) * 2)  # Drops to 0 at 35¢
         else:
@@ -1214,6 +1219,11 @@ class QuoteGenerator:
         fadeout_factor = rg_kpi.fadeout_factor if rg_kpi else 1.0
         rg_action = rg_kpi.active_action if rg_kpi else RiskAction.NONE
 
+        # 0. Skip dust markets — don't quote if mid is too low
+        if current_mid < self.config.min_fair_value:
+            logger.debug(f"Skip {token_id[:12]}: mid ${current_mid:.3f} < min ${self.config.min_fair_value:.3f}")
+            return None
+
         # 1. Fair value estimation
         # Use OU fair value only if well-calibrated (enough observations)
         ou_fair = self.ou.get_fair_value(token_id)
@@ -1292,7 +1302,7 @@ class QuoteGenerator:
                     ask_price = min_ask
 
         # Clamp to valid range
-        bid_price = max(0.01, min(0.98, round(bid_price, 3)))
+        bid_price = max(self.config.min_fair_value, min(0.98, round(bid_price, 3)))
         ask_price = max(0.02, min(0.99, round(ask_price, 3)))
 
         # Ensure bid < ask (minimum 1¢ spread)
@@ -1364,7 +1374,7 @@ class QuoteGenerator:
 
                 # Deeper bid (lower price)
                 lvl_bid_price = round(bid_price - bid_price * spacing, 3)
-                lvl_bid_price = max(0.01, lvl_bid_price)
+                lvl_bid_price = max(self.config.min_fair_value, lvl_bid_price)
                 if rg_action != RiskAction.ONESIDE or (pos.net_position <= 0):
                     if self.inventory.can_buy(token_id, lvl_size, lvl_bid_price):
                         pair.extra_bids.append(Quote(
