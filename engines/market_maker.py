@@ -1303,6 +1303,11 @@ class QuoteGenerator:
 
         # Clamp to valid range
         bid_price = max(self.config.min_fair_value, min(0.98, round(bid_price, 3)))
+
+        # Block penny bids — never bid below 2 cents (wastes bandwidth + buys trash)
+        if bid_price < 0.02:
+            logger.debug(f"Blocked penny bid: {token_id[:12]} bid=${bid_price:.3f} < $0.02")
+            return QuotePair(token_id=token_id, bid=None, ask=None)
         ask_price = max(0.02, min(0.99, round(ask_price, 3)))
 
         # Ensure bid < ask (minimum 1¢ spread)
@@ -1704,6 +1709,8 @@ class MarketMakerEngine:
                     self._kill_alerted = False
                 
                 for market in self._active_markets:
+                    if market is None:
+                        continue
                     await self._update_quotes(market)
                     
                     # Stealth: random delay between markets
@@ -1782,6 +1789,9 @@ class MarketMakerEngine:
 
         # Generate new quotes (with RiskGuard integration)
         pair = self.quote_gen.generate_quotes(token_id, mid, riskguard=self.riskguard)
+        if market is None or not hasattr(market, 'condition_id'):
+            logger.warning(f"Skipping quote: market object invalid for {token_id[:20]}")
+            return
         pair.condition_id = market.condition_id
         
         # Apply volume + time factors to quote sizes
