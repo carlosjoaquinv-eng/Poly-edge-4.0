@@ -1919,15 +1919,27 @@ class MarketMakerEngine:
 
             if pair.ask:
                 pair.ask.size = max(5.0, pair.ask.size)  # Polymarket min 5 shares
-                order_cost = pair.ask.price * pair.ask.size
-                # Polymarket rejects marketable orders < $1
-                if order_cost < 1.0:
-                    pair.ask.size = max(pair.ask.size, 1.0 / pair.ask.price + 1)
+
+                # ── CRITICAL: verify we actually have tokens to sell ──
+                pos = self.inventory.get_position(token_id)
+                if pos.net_position < pair.ask.size:
+                    if pos.net_position < 1:
+                        logger.debug(f"⛔ ASK blocked pre-CLOB: no tokens (net={pos.net_position:.0f})")
+                        pair.ask = None
+                    else:
+                        # Reduce to what we actually have
+                        pair.ask.size = max(5.0, pos.net_position)
+                        logger.debug(f"⛔ ASK reduced to inventory: {pair.ask.size:.0f} (had {pos.net_position:.0f})")
+
+                if pair.ask:
                     order_cost = pair.ask.price * pair.ask.size
-                if order_cost > available:
-                    logger.debug(f"⛔ ASK skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
-                    pair.ask = None
-                else:
+                    # Polymarket rejects marketable orders < $1
+                    if order_cost < 1.0:
+                        pair.ask.size = max(pair.ask.size, 1.0 / pair.ask.price + 1)
+                        order_cost = pair.ask.price * pair.ask.size
+                    if order_cost > available:
+                        logger.debug(f"⛔ ASK skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
+                        pair.ask = None
                     order = await self.clob.place_limit_order(
                         token_id=token_id,
                         side="SELL",
