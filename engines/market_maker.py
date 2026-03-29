@@ -22,6 +22,12 @@ from engine.core.hmm_regime import RegimeDetector, RegimeConfig
 import logging
 
 try:
+    from engine.core.risk_calculator import RiskCalculator, RISK_PROFILE_CONFIGS
+    _HAS_RISK_CALC = True
+except ImportError:
+    _HAS_RISK_CALC = False
+
+try:
     from engine.core.liquidity_checker import LiquidityChecker, LiquidityConfig
     _HAS_LIQUIDITY_CHECKER = True
 except ImportError:
@@ -1318,6 +1324,31 @@ class QuoteGenerator:
 
         # 7. Size with Kelly and jitter, THEN apply fadeout
         base_size = self._kelly_size(token_id, fair_value, bid_price, ask_price)
+
+        # Risk Calculator advisory (caps size but doesn't block MM operation)
+        if _HAS_RISK_CALC and base_size > 0:
+            try:
+                bankroll = getattr(self.config, 'bankroll', 463)
+                exposure = self.inventory.total_exposure
+                free = max(0, bankroll - exposure)
+                calc = RiskCalculator.from_profile(
+                    "conservative", bankroll=bankroll,
+                    free_usdc=free, current_exposure=exposure
+                )
+                decision = calc.size_trade(
+                    entry_price=bid_price,
+                    confidence=fair_value,
+                    side="YES",
+                    market_question=token_id[:20],
+                )
+                if decision.approved and decision.cost > 0:
+                    risk_size = decision.cost / bid_price if bid_price > 0 else base_size
+                    base_size = min(base_size, risk_size)
+                # If rejected, log but DON'T block — MM uses its own min/max sizing
+                elif not decision.approved:
+                    logger.debug(f"Risk calc advisory: {decision.reason}")
+            except Exception:
+                pass  # Fall through to normal sizing
         size = round(base_size * size_jitter_mult * fadeout_factor, 1)
         size = max(self.config.min_quote_size, min(self.config.max_quote_size, size))
 

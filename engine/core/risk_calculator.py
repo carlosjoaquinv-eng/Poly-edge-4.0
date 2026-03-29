@@ -119,16 +119,16 @@ class RiskConfig:
 
 RISK_PROFILE_CONFIGS = {
     "conservative": RiskConfig(
-        risk_pct=1.5, max_trade_size=25.0, min_trade_size=5.0,
-        kelly_fraction=0.15, min_edge_pct=8.0,
-        max_exposure_pct=40.0, reserve_pct=30.0,
-        max_single_market_pct=10.0, max_correlated_pct=20.0,
+        risk_pct=2.0, max_trade_size=25.0, min_trade_size=3.0,
+        kelly_fraction=0.15, min_edge_pct=5.0,
+        max_exposure_pct=90.0, reserve_pct=5.0,
+        max_single_market_pct=25.0, max_correlated_pct=40.0,
     ),
     "balanced": RiskConfig(
-        risk_pct=3.0, max_trade_size=50.0, min_trade_size=5.0,
+        risk_pct=3.0, max_trade_size=50.0, min_trade_size=3.0,
         kelly_fraction=0.25, min_edge_pct=5.0,
-        max_exposure_pct=65.0, reserve_pct=15.0,
-        max_single_market_pct=20.0, max_correlated_pct=35.0,
+        max_exposure_pct=85.0, reserve_pct=10.0,
+        max_single_market_pct=25.0, max_correlated_pct=40.0,
     ),
     "aggressive": RiskConfig(
         risk_pct=5.0, max_trade_size=75.0, min_trade_size=5.0,

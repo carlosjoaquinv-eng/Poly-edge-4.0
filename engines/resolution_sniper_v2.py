@@ -25,6 +25,12 @@ import asyncio
 import math
 import time
 import random
+
+try:
+    from engine.core.risk_calculator import RiskCalculator, RISK_PROFILE_CONFIGS
+    _HAS_RISK_CALC = True
+except ImportError:
+    _HAS_RISK_CALC = False
 import logging
 
 try:
@@ -175,11 +181,11 @@ class SniperConfig:
     max_event_age_secs: float = 120     # Ignore events older than 2 min
     
     # Execution
-    max_trade_size: float = 75.0        # $75 max per sniper trade
-    min_trade_size: float = 10.0        # $10 minimum
-    max_total_exposure: float = 300.0   # $300 total across all sniper positions
-    max_concurrent_trades: int = 6      # Max simultaneous positions
-    kelly_fraction: float = 0.3         # 30% Kelly for sniper (higher edge = more aggressive)
+    max_trade_size: float = 25.0        # $25 max per sniper trade (was $75)
+    min_trade_size: float = 5.0         # $5 minimum (was $10)
+    max_total_exposure: float = 100.0   # $100 total (was $300, too much for $463 bankroll)
+    max_concurrent_trades: int = 3      # Max 3 positions (was 6)
+    kelly_fraction: float = 0.20        # 20% Kelly (was 30%, too aggressive)
     
     # Timing
     execution_delay_ms: int = 500       # 500ms delay for stealth
@@ -1280,6 +1286,51 @@ class ResolutionSniperV2:
             logger.info(f"⛔ Sniper blocked: {reason} | {signal.market_question[:40]}")
             return
         
+        # ── RISK CALCULATOR GATE ──
+        if _HAS_RISK_CALC:
+            try:
+                import httpx, asyncio
+                # Get live portfolio data
+                proxy_addr = getattr(self.config, 'proxy_address', '')
+                free_usdc = 0
+                current_exposure = 0
+                try:
+                    r = await asyncio.to_thread(
+                        lambda: __import__('httpx').get(
+                            f"https://data-api.polymarket.com/positions",
+                            params={"user": proxy_addr.lower(), "sizeThreshold": "0.01"},
+                            timeout=5
+                        )
+                    )
+                    if r.status_code == 200:
+                        positions = r.json()
+                        current_exposure = sum(float(p.get("size",0)) * float(p.get("avgPrice",0)) for p in positions)
+                except Exception:
+                    pass
+
+                bankroll = getattr(self.config, 'bankroll', 463)
+                calc = RiskCalculator.from_profile(
+                    "conservative", bankroll=bankroll,
+                    free_usdc=max(0, bankroll - current_exposure),
+                    current_exposure=current_exposure
+                )
+                decision = calc.size_trade(
+                    entry_price=signal.current_price,
+                    confidence=signal.confidence,
+                    side="YES",
+                    market_question=signal.market_question[:60],
+                )
+                if not decision.approved:
+                    logger.info(f"⛔ RISK CALC BLOCKED: {decision.reason} | {signal.market_question[:40]}")
+                    return
+                logger.info(
+                    f"✅ RISK CALC: R:R {decision.risk_reward_ratio}:1 | "
+                    f"EV ${decision.expected_value:.2f} | "
+                    f"Size ${decision.cost:.2f} | {decision.reason}"
+                )
+            except Exception as e:
+                logger.debug(f"Risk calc skipped: {e}")
+
         # Compute size
         size = self.executor.compute_size(signal)
         
