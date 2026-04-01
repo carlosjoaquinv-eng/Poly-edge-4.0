@@ -15,6 +15,7 @@ Risk: $50/market max, $200 total across all markets
 """
 
 import asyncio
+import os
 import math
 import time
 import random
@@ -1301,7 +1302,7 @@ class QuoteGenerator:
             if pos.net_position > 0 and pos.avg_entry > 0:
                 min_ask = pos.avg_entry + self.config.breakeven_min_margin
                 if ask_price < min_ask:
-                    logger.debug(
+                    logger.info(
                         f"🛡️ BREAKEVEN FLOOR: ask {ask_price:.3f} < entry {pos.avg_entry:.3f} + "
                         f"{self.config.breakeven_min_margin:.3f} margin → raised to {min_ask:.3f}"
                     )
@@ -1443,7 +1444,7 @@ class QuoteGenerator:
                 min_force_ask = pos.avg_entry + self.config.breakeven_min_margin
                 if aggressive_ask < min_force_ask:
                     aggressive_ask = round(min_force_ask, 3)
-                    logger.debug(f"🛡️ Force ASK raised to breakeven: {aggressive_ask:.3f}")
+                    logger.info(f"🛡️ Force ASK raised to breakeven: {aggressive_ask:.3f}")
             ask_size = max(5.0, min(size, pos.net_position))  # Floor at 5 shares
             ask_quote = Quote(token_id=token_id, side=QuoteSide.ASK,
                              price=aggressive_ask, size=round(ask_size, 1))
