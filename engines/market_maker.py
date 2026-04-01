@@ -1534,7 +1534,7 @@ class MarketMakerEngine:
         self._paper_fills: List[Dict] = []  # Simulated fills for paper mode
         self._trade_log: List[Dict] = []  # All fills (paper + live), last 200
         self._last_clob_balance: float = 0.0  # Actual CLOB balance, refreshed periodically
-        self._force_kill = False  # Manual kill via /stop command
+        self._force_kill = os.environ.get("MM_KILL_SWITCH", "false").lower() in ("true", "1")  # Kill via env or /stop
         self._kill_alerted = False  # One-shot flag for kill-switch Telegram alert
 
         # Stats
@@ -1544,12 +1544,12 @@ class MarketMakerEngine:
         # Liquidity checker — prevents entering illiquid markets
         if _HAS_LIQUIDITY_CHECKER:
             self._liquidity_checker = LiquidityChecker(LiquidityConfig(
-                min_exit_depth_usd=10.0,     # At least $10 exit depth
-                min_depth_multiple=1.5,       # Exit depth >= 1.5x our trade
-                max_exit_slippage_pct=15.0,   # Max 15% slippage
-                max_spread_pct=20.0,          # Max 20% spread
-                min_exit_levels=1,            # At least 1 exit level
-                min_depth_ratio=0.0,          # Disabled — Polymarket books are naturally asymmetric
+                min_exit_depth_usd=30.0,     # At least $30 exit depth (was $10)
+                min_depth_multiple=2.0,       # Exit depth >= 2x our trade (was 1.5x)
+                max_exit_slippage_pct=8.0,    # Max 8% slippage (was 15%)
+                max_spread_pct=12.0,          # Max 12% spread (was 20%)
+                min_exit_levels=2,            # At least 2 exit levels (was 1)
+                min_depth_ratio=0.0,          # Disabled — Polymarket binary markets are asymmetric
                 max_depth_ratio=999.0,        # Disabled
                 dust_filter_usd=0.10,
             ))
@@ -1804,6 +1804,18 @@ class MarketMakerEngine:
                 volume_factor = max(self.config.volume_decay_min_factor, market.volume_24h / max(market.liquidity * 0.01, 1))
                 if volume_factor < 0.9:
                     logger.debug(f"📉 Volume decay: {market.question[:30]} vol_factor={volume_factor:.2f}")
+
+        # ── PRE-TRADE LIQUIDITY CHECK ──
+        # Don't enter markets where we can't exit
+        liq_result = self._liquidity_checker.analyze(ob, "buy", 15.0, mid)
+        if not liq_result.safe_to_enter:
+            logger.info(f"LIQUIDITY BLOCKED: {market.question[:35]} | {liq_result.reason}")
+            # Cancel any existing quotes for this market
+            if token_id in self._active_quotes:
+                await self._cancel_quotes(token_id)
+                del self._active_quotes[token_id]
+            return
+
 
         # ── Time proximity: reduce size near resolution ──
         time_factor = 1.0
