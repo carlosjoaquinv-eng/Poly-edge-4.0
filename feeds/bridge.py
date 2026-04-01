@@ -57,10 +57,9 @@ class FeedBridge:
             tasks.append(self._sports_loop())
             self.logger.info("Multi-sport feed enabled (NBA/NHL)")
 
-        # Weather feed if API key available
-        if getattr(self.config, "WEATHER_API_KEY", ""):
-            tasks.append(self._weather_loop())
-            self.logger.info("Weather feed enabled")
+        # Weather feed (Open-Meteo — no API key needed)
+        tasks.append(self._weather_loop())
+        self.logger.info("Weather feed enabled (Open-Meteo, no key needed)")
         self.logger.info(f"Crypto feed enabled: {self.config.CRYPTO_SYMBOLS}")
 
         if tasks:
@@ -208,7 +207,7 @@ class FeedBridge:
         """Poll weather feed for extreme weather events."""
         try:
             from feeds.weather import WeatherFeed
-            self._weather = WeatherFeed(self.config.WEATHER_API_KEY)
+            self._weather = WeatherFeed()  # Open-Meteo, no API key needed
             self.logger.info("Weather feed loaded from feeds/weather.py")
         except ImportError:
             self.logger.warning("feeds/weather.py not found")
