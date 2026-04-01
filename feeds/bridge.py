@@ -34,6 +34,7 @@ class FeedBridge:
         self._football = None
         self._crypto = None
         self._weather = None
+        self._sports = None
 
     async def start(self):
         self._running = True
@@ -50,6 +51,11 @@ class FeedBridge:
 
         # Crypto feed always runs (no API key needed)
         tasks.append(self._crypto_loop())
+
+        # Multi-sport feed (NBA/NHL) — uses same football API key
+        if self.config.FOOTBALL_API_KEY:
+            tasks.append(self._sports_loop())
+            self.logger.info("Multi-sport feed enabled (NBA/NHL)")
 
         # Weather feed if API key available
         if getattr(self.config, "WEATHER_API_KEY", ""):
@@ -174,6 +180,29 @@ class FeedBridge:
             except Exception as e:
                 self.logger.error(f"Crypto stub error: {e}")
                 await asyncio.sleep(10)
+
+
+    async def _sports_loop(self):
+        """Poll multi-sport feed for NBA/NHL events."""
+        try:
+            from feeds.sports import MultiSportFeed
+            self._sports = MultiSportFeed(self.config.FOOTBALL_API_KEY, ["basketball", "hockey"])
+            self.logger.info("Multi-sport feed loaded (NBA/NHL)")
+        except ImportError as e:
+            self.logger.warning(f"feeds/sports.py not found: {e}")
+            return
+
+        while self._running:
+            try:
+                events = await self._sports.poll()
+                for event in events:
+                    if hasattr(event, "event_type"):
+                        await self.sniper.on_event(event)
+                # Poll every 60s (games polled internally every 5min per sport)
+                await asyncio.sleep(60)
+            except Exception as e:
+                self.logger.error(f"Multi-sport feed error: {e}")
+                await asyncio.sleep(30)
 
     async def _weather_loop(self):
         """Poll weather feed for extreme weather events."""
