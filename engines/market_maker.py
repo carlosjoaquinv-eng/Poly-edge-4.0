@@ -1953,17 +1953,18 @@ class MarketMakerEngine:
                     if order_cost > available:
                         logger.debug(f"⛔ ASK skipped: ${order_cost:.1f} > ${available:.1f} available (locked=${locked:.1f})")
                         pair.ask = None
-                    order = await self.clob.place_limit_order(
-                        token_id=token_id,
-                        side="SELL",
-                        price=pair.ask.price,
-                        size=pair.ask.size,
-                    )
-                    if order:
-                        pair.ask.order_id = order.get("id")
-                        pair.ask.placed_at = time.time()
-                    else:
-                        pair.ask = None  # Order rejected
+                    if pair.ask is not None:
+                        order = await self.clob.place_limit_order(
+                            token_id=token_id,
+                            side="SELL",
+                            price=pair.ask.price,
+                            size=pair.ask.size,
+                        )
+                        if order:
+                            pair.ask.order_id = order.get("id")
+                            pair.ask.placed_at = time.time()
+                        else:
+                            pair.ask = None  # Order rejected
             
             self._active_quotes[token_id] = pair
             self._quote_count += 1
