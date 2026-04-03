@@ -175,9 +175,9 @@ class SniperTrade:
 class SniperConfig:
     """Resolution Sniper v2 configuration."""
     # Gap detection
-    min_gap_cents: float = 5.0          # 5¢ minimum gap to trade (was 3¢ — too many marginal trades)
+    min_gap_cents: float = 10.0         # 10¢ minimum gap (backtest: 75% WR at 10¢+ vs 46% at 3¢)
     min_confidence: float = 80.0        # 80% minimum event confidence (was 60% — filter noise)
-    min_edge_pct: float = 5.0           # 5% minimum expected return (was 3% — cover fees + slippage)
+    min_edge_pct: float = 10.0          # 10% minimum return (backtest: $14.24 PnL vs $9 at 5%)
     max_event_age_secs: float = 120     # Ignore events older than 2 min
     
     # Execution
