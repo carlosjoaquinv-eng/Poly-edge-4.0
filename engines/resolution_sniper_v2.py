@@ -177,7 +177,17 @@ class SniperConfig:
     # Gap detection
     min_gap_cents: float = 10.0         # 10¢ minimum gap (backtest: 75% WR at 10¢+ vs 46% at 3¢)
     min_confidence: float = 80.0        # 80% minimum event confidence (was 60% — filter noise)
-    min_edge_pct: float = 10.0          # 10% minimum return (backtest: $14.24 PnL vs $9 at 5%)
+    min_edge_pct: float = 10.0
+
+    # Auto-promotion: paper → live when criteria met
+    auto_promote_enabled: bool = True
+    auto_promote_min_trades: int = 5
+    auto_promote_min_win_rate: float = 60.0   # %
+    auto_promote_min_days: int = 7
+    auto_promote_max_single_loss: float = 10.0  # $
+    auto_promote_min_rr: float = 2.0
+    auto_promote_live_max_exposure: float = 25.0  # $ max when auto-promoted
+    auto_promote_checked: bool = False  # Only promote once          # 10% minimum return (backtest: $14.24 PnL vs $9 at 5%)
     max_event_age_secs: float = 120     # Ignore events older than 2 min
     
     # Execution
@@ -520,6 +530,98 @@ class MarketMapper:
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
         return keywords
     
+
+    async def _check_auto_promote(self):
+        """Check if paper trading criteria are met to auto-promote to LIVE."""
+        import time as _time
+
+        stats = self.get_stats()
+        executor = stats.get("executor", {})
+
+        completed = executor.get("completed_trades", 0)
+        win_rate = executor.get("win_rate", 0)
+        total_pnl = executor.get("total_pnl", 0)
+        avg_pnl = executor.get("avg_pnl", 0)
+
+        # Check minimum days running
+        uptime_hours = stats.get("uptime_hours", 0)
+        days_running = uptime_hours / 24
+
+        if days_running < self.config.auto_promote_min_days:
+            return  # Too early
+
+        if completed < self.config.auto_promote_min_trades:
+            return  # Not enough trades
+
+        # Check win rate
+        if win_rate < self.config.auto_promote_min_win_rate:
+            self.logger.info(
+                f"Auto-promote: FAIL — WR {win_rate:.0f}% < {self.config.auto_promote_min_win_rate}% "
+                f"({completed} trades, ${total_pnl:+.2f} PnL)"
+            )
+            return
+
+        # Check PnL positive
+        if total_pnl <= 0:
+            self.logger.info(f"Auto-promote: FAIL — PnL ${total_pnl:.2f} not positive")
+            return
+
+        # Check no single large loss
+        active_positions = executor.get("active_positions", [])
+        # We check completed trades from state file
+        try:
+            import json
+            state = json.load(open("/root/polyedge/v4/data_v4/sniper_state.json"))
+            trades = state.get("executor", {}).get("completed_trades", [])
+            if isinstance(trades, list):
+                max_loss = min((t.get("pnl", 0) for t in trades), default=0)
+                if abs(max_loss) > self.config.auto_promote_max_single_loss:
+                    self.logger.info(f"Auto-promote: FAIL — max loss ${max_loss:.2f} > ${self.config.auto_promote_max_single_loss}")
+                    return
+
+                # Check R:R
+                wins = [t["pnl"] for t in trades if t.get("pnl", 0) > 0]
+                losses = [t["pnl"] for t in trades if t.get("pnl", 0) < 0]
+                avg_win = sum(wins) / len(wins) if wins else 0
+                avg_loss = sum(losses) / len(losses) if losses else -1
+                rr = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+                if rr < self.config.auto_promote_min_rr:
+                    self.logger.info(f"Auto-promote: FAIL — R:R {rr:.1f} < {self.config.auto_promote_min_rr}")
+                    return
+        except Exception:
+            return  # Can't verify, skip
+
+        # ALL CRITERIA PASSED — promote to LIVE
+        self.config.auto_promote_checked = True
+        self._paper_mode = False
+        self.config.max_total_exposure = self.config.auto_promote_live_max_exposure
+
+        self.logger.warning(
+            f"AUTO-PROMOTE: Sniper switching PAPER -> LIVE! "
+            f"Criteria met: {completed} trades, {win_rate:.0f}% WR, ${total_pnl:+.2f} PnL, "
+            f"R:R {rr:.1f}:1. Max exposure: ${self.config.auto_promote_live_max_exposure}"
+        )
+
+        # Telegram notification
+        try:
+            if hasattr(self, "_telegram") and self._telegram:
+                msg = (
+                    "\U0001f680 SNIPER AUTO-PROMOTED TO LIVE\n"
+                    "\n"
+                    f"Paper results ({int(days_running)}d):\n"
+                    f"  Trades: {completed}\n"
+                    f"  Win rate: {win_rate:.0f}%\n"
+                    f"  PnL: ${total_pnl:+.2f}\n"
+                    f"  R:R: {rr:.1f}:1\n"
+                    f"\n"
+                    f"LIVE mode: max ${self.config.auto_promote_live_max_exposure} exposure\n"
+                    f"Use /stop to halt if needed."
+                )
+                await self._telegram.send(msg)
+        except Exception as e:
+            self.logger.error(f"Auto-promote Telegram error: {e}")
+
+
     def get_stats(self) -> Dict:
         return {
             "total_markets": len(self._markets),
@@ -937,6 +1039,98 @@ class GapDetector:
             reverse=True
         )[:limit]
     
+
+    async def _check_auto_promote(self):
+        """Check if paper trading criteria are met to auto-promote to LIVE."""
+        import time as _time
+
+        stats = self.get_stats()
+        executor = stats.get("executor", {})
+
+        completed = executor.get("completed_trades", 0)
+        win_rate = executor.get("win_rate", 0)
+        total_pnl = executor.get("total_pnl", 0)
+        avg_pnl = executor.get("avg_pnl", 0)
+
+        # Check minimum days running
+        uptime_hours = stats.get("uptime_hours", 0)
+        days_running = uptime_hours / 24
+
+        if days_running < self.config.auto_promote_min_days:
+            return  # Too early
+
+        if completed < self.config.auto_promote_min_trades:
+            return  # Not enough trades
+
+        # Check win rate
+        if win_rate < self.config.auto_promote_min_win_rate:
+            self.logger.info(
+                f"Auto-promote: FAIL — WR {win_rate:.0f}% < {self.config.auto_promote_min_win_rate}% "
+                f"({completed} trades, ${total_pnl:+.2f} PnL)"
+            )
+            return
+
+        # Check PnL positive
+        if total_pnl <= 0:
+            self.logger.info(f"Auto-promote: FAIL — PnL ${total_pnl:.2f} not positive")
+            return
+
+        # Check no single large loss
+        active_positions = executor.get("active_positions", [])
+        # We check completed trades from state file
+        try:
+            import json
+            state = json.load(open("/root/polyedge/v4/data_v4/sniper_state.json"))
+            trades = state.get("executor", {}).get("completed_trades", [])
+            if isinstance(trades, list):
+                max_loss = min((t.get("pnl", 0) for t in trades), default=0)
+                if abs(max_loss) > self.config.auto_promote_max_single_loss:
+                    self.logger.info(f"Auto-promote: FAIL — max loss ${max_loss:.2f} > ${self.config.auto_promote_max_single_loss}")
+                    return
+
+                # Check R:R
+                wins = [t["pnl"] for t in trades if t.get("pnl", 0) > 0]
+                losses = [t["pnl"] for t in trades if t.get("pnl", 0) < 0]
+                avg_win = sum(wins) / len(wins) if wins else 0
+                avg_loss = sum(losses) / len(losses) if losses else -1
+                rr = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+                if rr < self.config.auto_promote_min_rr:
+                    self.logger.info(f"Auto-promote: FAIL — R:R {rr:.1f} < {self.config.auto_promote_min_rr}")
+                    return
+        except Exception:
+            return  # Can't verify, skip
+
+        # ALL CRITERIA PASSED — promote to LIVE
+        self.config.auto_promote_checked = True
+        self._paper_mode = False
+        self.config.max_total_exposure = self.config.auto_promote_live_max_exposure
+
+        self.logger.warning(
+            f"AUTO-PROMOTE: Sniper switching PAPER -> LIVE! "
+            f"Criteria met: {completed} trades, {win_rate:.0f}% WR, ${total_pnl:+.2f} PnL, "
+            f"R:R {rr:.1f}:1. Max exposure: ${self.config.auto_promote_live_max_exposure}"
+        )
+
+        # Telegram notification
+        try:
+            if hasattr(self, "_telegram") and self._telegram:
+                msg = (
+                    "\U0001f680 SNIPER AUTO-PROMOTED TO LIVE\n"
+                    "\n"
+                    f"Paper results ({int(days_running)}d):\n"
+                    f"  Trades: {completed}\n"
+                    f"  Win rate: {win_rate:.0f}%\n"
+                    f"  PnL: ${total_pnl:+.2f}\n"
+                    f"  R:R: {rr:.1f}:1\n"
+                    f"\n"
+                    f"LIVE mode: max ${self.config.auto_promote_live_max_exposure} exposure\n"
+                    f"Use /stop to halt if needed."
+                )
+                await self._telegram.send(msg)
+        except Exception as e:
+            self.logger.error(f"Auto-promote Telegram error: {e}")
+
+
     def get_stats(self) -> Dict:
         active = [s for s in self._recent_signals if not s.is_expired]
         return {
@@ -1048,6 +1242,98 @@ class SniperExecutor:
         self._completed_trades.append(trade)
         self._active_trades.remove(trade)
     
+
+    async def _check_auto_promote(self):
+        """Check if paper trading criteria are met to auto-promote to LIVE."""
+        import time as _time
+
+        stats = self.get_stats()
+        executor = stats.get("executor", {})
+
+        completed = executor.get("completed_trades", 0)
+        win_rate = executor.get("win_rate", 0)
+        total_pnl = executor.get("total_pnl", 0)
+        avg_pnl = executor.get("avg_pnl", 0)
+
+        # Check minimum days running
+        uptime_hours = stats.get("uptime_hours", 0)
+        days_running = uptime_hours / 24
+
+        if days_running < self.config.auto_promote_min_days:
+            return  # Too early
+
+        if completed < self.config.auto_promote_min_trades:
+            return  # Not enough trades
+
+        # Check win rate
+        if win_rate < self.config.auto_promote_min_win_rate:
+            self.logger.info(
+                f"Auto-promote: FAIL — WR {win_rate:.0f}% < {self.config.auto_promote_min_win_rate}% "
+                f"({completed} trades, ${total_pnl:+.2f} PnL)"
+            )
+            return
+
+        # Check PnL positive
+        if total_pnl <= 0:
+            self.logger.info(f"Auto-promote: FAIL — PnL ${total_pnl:.2f} not positive")
+            return
+
+        # Check no single large loss
+        active_positions = executor.get("active_positions", [])
+        # We check completed trades from state file
+        try:
+            import json
+            state = json.load(open("/root/polyedge/v4/data_v4/sniper_state.json"))
+            trades = state.get("executor", {}).get("completed_trades", [])
+            if isinstance(trades, list):
+                max_loss = min((t.get("pnl", 0) for t in trades), default=0)
+                if abs(max_loss) > self.config.auto_promote_max_single_loss:
+                    self.logger.info(f"Auto-promote: FAIL — max loss ${max_loss:.2f} > ${self.config.auto_promote_max_single_loss}")
+                    return
+
+                # Check R:R
+                wins = [t["pnl"] for t in trades if t.get("pnl", 0) > 0]
+                losses = [t["pnl"] for t in trades if t.get("pnl", 0) < 0]
+                avg_win = sum(wins) / len(wins) if wins else 0
+                avg_loss = sum(losses) / len(losses) if losses else -1
+                rr = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+                if rr < self.config.auto_promote_min_rr:
+                    self.logger.info(f"Auto-promote: FAIL — R:R {rr:.1f} < {self.config.auto_promote_min_rr}")
+                    return
+        except Exception:
+            return  # Can't verify, skip
+
+        # ALL CRITERIA PASSED — promote to LIVE
+        self.config.auto_promote_checked = True
+        self._paper_mode = False
+        self.config.max_total_exposure = self.config.auto_promote_live_max_exposure
+
+        self.logger.warning(
+            f"AUTO-PROMOTE: Sniper switching PAPER -> LIVE! "
+            f"Criteria met: {completed} trades, {win_rate:.0f}% WR, ${total_pnl:+.2f} PnL, "
+            f"R:R {rr:.1f}:1. Max exposure: ${self.config.auto_promote_live_max_exposure}"
+        )
+
+        # Telegram notification
+        try:
+            if hasattr(self, "_telegram") and self._telegram:
+                msg = (
+                    "\U0001f680 SNIPER AUTO-PROMOTED TO LIVE\n"
+                    "\n"
+                    f"Paper results ({int(days_running)}d):\n"
+                    f"  Trades: {completed}\n"
+                    f"  Win rate: {win_rate:.0f}%\n"
+                    f"  PnL: ${total_pnl:+.2f}\n"
+                    f"  R:R: {rr:.1f}:1\n"
+                    f"\n"
+                    f"LIVE mode: max ${self.config.auto_promote_live_max_exposure} exposure\n"
+                    f"Use /stop to halt if needed."
+                )
+                await self._telegram.send(msg)
+        except Exception as e:
+            self.logger.error(f"Auto-promote Telegram error: {e}")
+
+
     def get_stats(self) -> Dict:
         completed = self._completed_trades
         wins = [t for t in completed if t.pnl > 0]
@@ -1423,6 +1709,11 @@ class ResolutionSniperV2:
                     self._raw_markets = raw_markets
                     self.mapper.index_markets(raw_markets)
                     logger.info(f"Market index refreshed: {len(raw_markets)} markets")
+
+                    # Auto-promote check (paper -> live when criteria met)
+                    if self.config.auto_promote_enabled and self._paper_mode and not self.config.auto_promote_checked:
+                        await self._check_auto_promote()
+
             except Exception as e:
                 logger.error(f"Market refresh error: {e}", exc_info=True)
             
@@ -1518,6 +1809,98 @@ class ResolutionSniperV2:
     
     # ── Stats & Dashboard ──
     
+
+    async def _check_auto_promote(self):
+        """Check if paper trading criteria are met to auto-promote to LIVE."""
+        import time as _time
+
+        stats = self.get_stats()
+        executor = stats.get("executor", {})
+
+        completed = executor.get("completed_trades", 0)
+        win_rate = executor.get("win_rate", 0)
+        total_pnl = executor.get("total_pnl", 0)
+        avg_pnl = executor.get("avg_pnl", 0)
+
+        # Check minimum days running
+        uptime_hours = stats.get("uptime_hours", 0)
+        days_running = uptime_hours / 24
+
+        if days_running < self.config.auto_promote_min_days:
+            return  # Too early
+
+        if completed < self.config.auto_promote_min_trades:
+            return  # Not enough trades
+
+        # Check win rate
+        if win_rate < self.config.auto_promote_min_win_rate:
+            self.logger.info(
+                f"Auto-promote: FAIL — WR {win_rate:.0f}% < {self.config.auto_promote_min_win_rate}% "
+                f"({completed} trades, ${total_pnl:+.2f} PnL)"
+            )
+            return
+
+        # Check PnL positive
+        if total_pnl <= 0:
+            self.logger.info(f"Auto-promote: FAIL — PnL ${total_pnl:.2f} not positive")
+            return
+
+        # Check no single large loss
+        active_positions = executor.get("active_positions", [])
+        # We check completed trades from state file
+        try:
+            import json
+            state = json.load(open("/root/polyedge/v4/data_v4/sniper_state.json"))
+            trades = state.get("executor", {}).get("completed_trades", [])
+            if isinstance(trades, list):
+                max_loss = min((t.get("pnl", 0) for t in trades), default=0)
+                if abs(max_loss) > self.config.auto_promote_max_single_loss:
+                    self.logger.info(f"Auto-promote: FAIL — max loss ${max_loss:.2f} > ${self.config.auto_promote_max_single_loss}")
+                    return
+
+                # Check R:R
+                wins = [t["pnl"] for t in trades if t.get("pnl", 0) > 0]
+                losses = [t["pnl"] for t in trades if t.get("pnl", 0) < 0]
+                avg_win = sum(wins) / len(wins) if wins else 0
+                avg_loss = sum(losses) / len(losses) if losses else -1
+                rr = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+                if rr < self.config.auto_promote_min_rr:
+                    self.logger.info(f"Auto-promote: FAIL — R:R {rr:.1f} < {self.config.auto_promote_min_rr}")
+                    return
+        except Exception:
+            return  # Can't verify, skip
+
+        # ALL CRITERIA PASSED — promote to LIVE
+        self.config.auto_promote_checked = True
+        self._paper_mode = False
+        self.config.max_total_exposure = self.config.auto_promote_live_max_exposure
+
+        self.logger.warning(
+            f"AUTO-PROMOTE: Sniper switching PAPER -> LIVE! "
+            f"Criteria met: {completed} trades, {win_rate:.0f}% WR, ${total_pnl:+.2f} PnL, "
+            f"R:R {rr:.1f}:1. Max exposure: ${self.config.auto_promote_live_max_exposure}"
+        )
+
+        # Telegram notification
+        try:
+            if hasattr(self, "_telegram") and self._telegram:
+                msg = (
+                    "\U0001f680 SNIPER AUTO-PROMOTED TO LIVE\n"
+                    "\n"
+                    f"Paper results ({int(days_running)}d):\n"
+                    f"  Trades: {completed}\n"
+                    f"  Win rate: {win_rate:.0f}%\n"
+                    f"  PnL: ${total_pnl:+.2f}\n"
+                    f"  R:R: {rr:.1f}:1\n"
+                    f"\n"
+                    f"LIVE mode: max ${self.config.auto_promote_live_max_exposure} exposure\n"
+                    f"Use /stop to halt if needed."
+                )
+                await self._telegram.send(msg)
+        except Exception as e:
+            self.logger.error(f"Auto-promote Telegram error: {e}")
+
+
     def get_stats(self) -> Dict:
         uptime = time.time() - self._started_at if self._started_at else 0
         
