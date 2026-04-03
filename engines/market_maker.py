@@ -1905,6 +1905,61 @@ class MarketMakerEngine:
                 balance_cap = min(self._last_clob_balance, self.config.max_total_inventory)
             available = balance_cap - locked
 
+            # ── CAPITAL PRESERVATION GATE ──
+            # Enforces risk limits BEFORE any BUY order is placed
+            if pair.bid and hasattr(self, '_last_clob_balance') and self._last_clob_balance > 0:
+                equity = self._last_clob_balance + locked  # Total equity = free + locked
+                free_pct = self._last_clob_balance / equity * 100 if equity > 0 else 0
+                order_cost_est = pair.bid.price * pair.bid.size
+
+                # RULE 1: Reserve minimum 25% of equity as free USDC
+                min_reserve = equity * 0.25
+                if self._last_clob_balance - order_cost_est < min_reserve:
+                    logger.info(
+                        f"\U0001f6e1 CAPITAL GATE: reserve violation — "
+                        f"free ${self._last_clob_balance:.0f} - order ${order_cost_est:.0f} "
+                        f"< reserve ${min_reserve:.0f} (25% of ${equity:.0f})"
+                    )
+                    pair.bid = None
+
+                # RULE 2: Max 3% of equity per single trade
+                if pair.bid:
+                    max_per_trade = equity * 0.03
+                    if order_cost_est > max_per_trade:
+                        logger.info(
+                            f"\U0001f6e1 CAPITAL GATE: trade too large — "
+                            f"${order_cost_est:.1f} > 3% of equity (${max_per_trade:.1f})"
+                        )
+                        # Reduce size to fit within limit
+                        max_size = max_per_trade / pair.bid.price if pair.bid.price > 0 else 0
+                        if max_size >= 5.0:
+                            pair.bid.size = round(max_size, 1)
+                            order_cost_est = pair.bid.price * pair.bid.size
+                        else:
+                            pair.bid = None
+
+                # RULE 3: Max exposure per market (25% of equity)
+                if pair.bid:
+                    pos = self.inventory.get_position(token_id)
+                    current_market_value = pos.net_position * pos.avg_entry if pos.net_position > 0 else 0
+                    max_market = equity * 0.25
+                    if current_market_value + order_cost_est > max_market:
+                        logger.info(
+                            f"\U0001f6e1 CAPITAL GATE: market concentration — "
+                            f"${current_market_value:.0f} + ${order_cost_est:.0f} > 25% of equity (${max_market:.0f})"
+                        )
+                        pair.bid = None
+
+                # RULE 4: Max total exposure 70% (keep 30% liquid)
+                if pair.bid:
+                    total_exposure_pct = locked / equity * 100 if equity > 0 else 100
+                    if total_exposure_pct > 70:
+                        logger.info(
+                            f"\U0001f6e1 CAPITAL GATE: max exposure — "
+                            f"{total_exposure_pct:.0f}% locked > 70% limit"
+                        )
+                        pair.bid = None
+
             if pair.bid:
                 # Enforce Polymarket minimum 5 shares
                 pair.bid.size = max(5.0, pair.bid.size)  # Polymarket min 5 shares
