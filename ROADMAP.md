@@ -120,6 +120,20 @@
 - [ ] Multi-account support (run multiple wallets independently)
 - [ ] Multi-level quoting (3 BID + 3 ASK per market)
 
+### Phase 13: Cross-Platform Arbitrage (Kalshi ↔ Polymarket)
+> Risk-free profit by exploiting price differences between prediction markets.
+> Requires: Kalshi KYC, $500+ capital split across both platforms, <1s execution.
+- [ ] Kalshi API client (REST + WebSocket, separate from CLOB)
+- [ ] Market mapper: match identical markets across Kalshi ↔ Polymarket
+- [ ] Spread scanner: real-time monitoring of price differences (>3¢ threshold)
+- [ ] Dual-leg execution: atomic buy on cheap side + sell on expensive side
+- [ ] Settlement reconciliation: track outcomes across both platforms
+- [ ] Risk controls: max exposure per arb, max capital per platform
+- [ ] Latency optimization: pre-signed orders, parallel execution
+- [ ] PnL tracking: per-arb profit, platform fees, net after costs
+- [ ] Telegram alerts: "ARB FOUND: Lakers YES — Poly $0.12 vs Kalshi $0.15 = 3¢ spread"
+- [ ] Prerequisites: Kalshi account verified, $250+ deposited on each platform
+
 ---
 
 ## Architecture
