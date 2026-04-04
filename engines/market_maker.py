@@ -210,10 +210,10 @@ class MMConfig:
     # Native skew handles 95% of inventory management; RiskGuard is the emergency brake
     max_units_per_market: float = 400.0         # Hard cap on units — strong skew prevents reaching this
     inventory_warn_pct: float = 0.70            # 70% → log warning (no action)
-    inventory_fadeout_pct: float = 0.85         # 85% → start reducing quote size
-    inventory_oneside_pct: float = 0.92         # 92% → only quote reducing side
+    inventory_fadeout_pct: float = 0.60         # 60% → reduce BID size earlier (was 85%)
+    inventory_oneside_pct: float = 0.70         # 70% → ASK-only mode earlier (was 92%)
     inventory_halt_pct: float = 0.98            # 98% → stop quoting (near-max only)
-    adaptive_skew_threshold: float = 0.65       # 65% → mild RiskGuard skew boost
+    adaptive_skew_threshold: float = 0.40       # 40% → start skewing to SELL earlier (was 65%)
     adaptive_skew_multiplier: float = 2.0       # Max 2x skew boost (native skew is strong)
     fill_asymmetry_window: int = 20             # Last N fills to check asymmetry
     fill_asymmetry_threshold: float = 0.85      # >85% one-sided fills → trigger
